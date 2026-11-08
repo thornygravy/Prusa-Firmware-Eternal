@@ -277,7 +277,7 @@
   #define LA_LA10_MIN LA_K_MAX // Lin. Advance 1.0 threshold value (inclusive)
   //#define LA_FLOWADJ         // Adjust LA along with flow/M221 for uniform width
   //#define LA_NOCOMPAT        // Disable Linear Advance 1.0 compatibility
-  //#define LA_LIVE_K          // Allow adjusting K in the Tune menu
+  #define LA_LIVE_K          // Allow adjusting K in the Tune menu
   //#define LA_DEBUG           // If enabled, this will generate debug information output over USB.
   //#define LA_DEBUG_LOGIC     // @wavexx: setup logic channels for isr debugging
 #endif
