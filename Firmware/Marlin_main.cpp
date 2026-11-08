@@ -6196,7 +6196,7 @@ void process_commands()
     Set some advanced settings related to movement.
     #### Usage
 
-        M205 [ S | T | B | X | Y | Z | E ]
+        M205 [ S | T | B | X | Y | Z | E | J ]
 
     #### Parameters
     - `S` - Minimum feedrate for print moves (unit/s)
@@ -6206,6 +6206,9 @@ void process_commands()
     - `Y` - Maximum Y jerk (units/s)
     - `Z` - Maximum Z jerk (units/s)
     - `E` - Maximum E jerk (units/s)
+    - `J` - Junction deviation (mm). Limits corner speed by how far the path may cut the corner at the
+            move's acceleration, replacing the X/Y jerk check between XYZ moves. `J0` selects the classic
+            jerk logic (default). Not stored in EEPROM. Typical values: 0.008 - 0.025
     */
     case 205:
     {
@@ -6223,6 +6226,9 @@ void process_commands()
 #endif
           cs.max_jerk[E_AXIS] = e;
       }
+#ifdef JUNCTION_DEVIATION
+      if(code_seen('J')) junction_deviation = max(code_value(), 0.f);
+#endif
     }
     break;
 

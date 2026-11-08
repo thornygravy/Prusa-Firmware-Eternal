@@ -122,6 +122,15 @@ float extruder_advance_K = LA_K_DEF;
 float position_float[NUM_AXIS];
 #endif
 
+#ifdef JUNCTION_DEVIATION
+float junction_deviation = DEFAULT_JUNCTION_DEVIATION;
+// XYZ direction of the previous block (zero vector for moves without XYZ motion). Only read while
+// previous_nominal_speed > 0, i.e. whenever the planner has a valid previous block, so the planner
+// resets that already take care of previous_speed[] need not touch this.
+static float previous_unit_vec[3];
+static bool previous_has_xyz;
+#endif
+
 // Request the next block to start at zero E count
 static bool plan_reset_next_e_queue;
 static bool plan_reset_next_e_sched;
@@ -1058,6 +1067,19 @@ Having the real displacement of the head, we can calculate the total movement le
       plan_reset_next_e_sched = false;
   }
 
+#ifdef JUNCTION_DEVIATION
+  // XYZ direction of this block. A block without XYZ motion (E-only: retract, unretract) has none.
+  // block->millimeters is the XYZ length whenever there is XYZ motion, so this is a unit vector.
+  const bool block_has_xyz = !(block->steps[X_AXIS].wide <= dropsegments
+                               && block->steps[Y_AXIS].wide <= dropsegments
+                               && block->steps[Z_AXIS].wide <= dropsegments);
+  float unit_vec[3] = {0.f, 0.f, 0.f};
+  if (block_has_xyz) {
+      for (uint8_t i = 0; i < 3; ++i)
+          unit_vec[i] = delta_mm[i] * inverse_millimeters;
+  }
+#endif
+
   // Initial limit on the segment entry velocity.
   float vmax_junction;
 
@@ -1077,8 +1099,16 @@ Having the real displacement of the head, we can calculate the total movement le
       // Factor to multiply the previous / current nominal velocities to get componentwise limited velocities.
       float v_factor = 1.f;
       limited = false;
+#ifdef JUNCTION_DEVIATION
+      // Junction deviation takes over the X/Y limit between two moves that both have XYZ motion.
+      const bool use_jd = junction_deviation > 0.f && block_has_xyz && previous_has_xyz;
+#endif
       // Now limit the jerk in all axes.
       for (uint8_t axis = 0; axis < 4; ++ axis) {
+#ifdef JUNCTION_DEVIATION
+          if (use_jd && axis <= Y_AXIS)
+              continue; // handled by the junction deviation limit below
+#endif
           // Limit an axis. We have to differentiate coasting from the reversal of an axis movement, or a full stop.
           float v_exit  = previous_speed[axis];
           float v_entry = current_speed [axis];
@@ -1109,6 +1139,26 @@ Having the real displacement of the head, we can calculate the total movement le
       }
       if (limited)
           vmax_junction *= v_factor;
+#ifdef JUNCTION_DEVIATION
+      if (use_jd) {
+          // cos(theta) between the two moves: -1 for a straight continuation, +1 for a full reversal.
+          const float cos_theta = -(previous_unit_vec[X_AXIS] * unit_vec[X_AXIS]
+                                    + previous_unit_vec[Y_AXIS] * unit_vec[Y_AXIS]
+                                    + previous_unit_vec[Z_AXIS] * unit_vec[Z_AXIS]);
+          if (cos_theta > -0.999999f) { // a straight continuation needs no corner limit
+              float v_jd = 0.f; // full reversal: the machine has to stop
+              if (cos_theta < 0.999999f) {
+                  // The fastest speed at which a corner of this angle deviates from the sharp corner
+                  // by no more than junction_deviation when cornering at the block's acceleration:
+                  // v^2 = a * d * sin(theta/2) / (1 - sin(theta/2))
+                  const float sin_half_theta = sqrt(0.5f * (1.f - cos_theta));
+                  v_jd = sqrt(junction_deviation * block->acceleration * sin_half_theta / (1.f - sin_half_theta));
+              }
+              if (v_jd < vmax_junction)
+                  vmax_junction = v_jd;
+          }
+      }
+#endif
       // Now the transition velocity is known, which maximizes the shared exit / entry velocity while
       // respecting the jerk factors, it may be possible, that applying separate safe exit / entry velocities will achieve faster prints.
       float vmax_junction_threshold = vmax_junction * 0.99f;
@@ -1143,6 +1193,10 @@ Having the real displacement of the head, we can calculate the total movement le
 
   // Update previous path unit_vector and nominal speed
   memcpy(previous_speed, current_speed, sizeof(previous_speed)); // previous_speed[] = current_speed[]
+#ifdef JUNCTION_DEVIATION
+  previous_has_xyz = block_has_xyz;
+  memcpy(previous_unit_vec, unit_vec, sizeof(previous_unit_vec));
+#endif
   previous_nominal_speed = block->nominal_speed;
   previous_safe_speed = safe_speed;
 

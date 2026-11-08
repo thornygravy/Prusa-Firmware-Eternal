@@ -156,6 +156,20 @@
 // If defined the movements slow down when the look ahead buffer is only half full
 #define SLOWDOWN
 
+// Junction deviation (cornering model from GRBL / Marlin 1.1+).
+// Instead of limiting the per-axis velocity step ("jerk") at a corner between two XYZ moves,
+// the corner speed is derived from how far the nozzle path may deviate from the ideal sharp corner
+// at the move's acceleration. The limit therefore scales with acceleration and with the actual
+// corner angle, not with the way the corner happens to be aligned to the X/Y axes.
+//  - Z and E keep their jerk limits, and the "safe speed" floor still comes from the X/Y jerk,
+//    so very sharp corners behave exactly like stock firmware.
+//  - Moves without XYZ motion (retracts, unretracts) always use the classic jerk logic.
+//  - Runtime control: M205 J<mm>. J0 selects the classic jerk logic; this is the default, so
+//    a fresh build behaves like stock until you opt in. The value is not stored in EEPROM,
+//    set it from your slicer's start G-code. Typical values are 0.008 .. 0.025 mm.
+#define JUNCTION_DEVIATION
+#define DEFAULT_JUNCTION_DEVIATION 0.0f // [mm] 0 = disabled (classic jerk)
+
 // MS1 MS2 Stepper Driver Microstepping mode table
 #define MICROSTEP1 LOW,LOW
 #define MICROSTEP2 HIGH,LOW

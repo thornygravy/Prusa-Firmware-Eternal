@@ -126,6 +126,10 @@ typedef struct {
 extern float extruder_advance_K;    // Linear-advance K factor
 #endif
 
+#ifdef JUNCTION_DEVIATION
+extern float junction_deviation;    // Junction deviation [mm], 0 = classic per-axis jerk (M205 J)
+#endif
+
 // Initialize the motion plan subsystem
 void plan_init();
 
