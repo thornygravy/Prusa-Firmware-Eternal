@@ -337,8 +337,10 @@ if(CMAKE_CROSSCOMPILING)
   add_link_options(-ffunction-sections -fdata-sections -Wl,--gc-sections)
 
   # LTO (with custom options)
-  add_compile_options(-flto -fno-fat-lto-objects)
-  add_link_options(-flto)
+  # -flto-partition=none: one LTO partition so the whole program can be inlined/merged together.
+  # Costs link time and memory only; saves ~240 B of flash on MK3S. Conforming (unlike -fmerge-all-constants).
+  add_compile_options(-flto -fno-fat-lto-objects -flto-partition=none)
+  add_link_options(-flto -flto-partition=none)
 
   # Create this target before we apply the GC options
   add_library(avr_core STATIC ${AVR_SOURCES})
