@@ -679,7 +679,8 @@ void CardReader::checkautostart(bool force)
 
   char autoname[30];
   sprintf_P(autoname, PSTR("auto%i.g"), lastnr);
-  for(int8_t i=0;i<(int8_t)strlen(autoname);i++)
+  const int8_t autoname_len = (int8_t)strlen(autoname);
+  for(int8_t i=0; i<autoname_len; i++)
     autoname[i]=tolower(autoname[i]);
   dir_t p;
 
@@ -688,8 +689,9 @@ void CardReader::checkautostart(bool force)
   bool found=false;
   while (root.readDir(p, NULL) > 0)
   {
-    for(int8_t i=0;i<(int8_t)strlen((char*)p.name);i++)
-    p.name[i]=tolower(p.name[i]);
+    const int8_t name_len = (int8_t)strlen((char*)p.name);
+    for(int8_t i=0; i<name_len; i++)
+      p.name[i]=tolower(p.name[i]);
     //Serial.print((char*)p.name);
     //Serial.print(" ");
     //Serial.println(autoname);
