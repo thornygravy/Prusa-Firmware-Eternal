@@ -428,3 +428,7 @@ const unsigned int dropsegments=5; //everything with less than this number of st
 
 
 #endif //__CONFIGURATION_ADV_H
+
+// Diagnostic builds (off by default; add them with -DCUSTOM_COMPILE_OPTIONS="-DDEBUG_ISR_LOAD -DDEBUG_STACK_MONITOR"):
+//  DEBUG_ISR_LOAD       stepper ISR duty cycle (average, peak over ~50 ms, longest ISR, late count), printed by M503
+//  DEBUG_STACK_MONITOR  lowest stack pointer seen, shown on the Support menu screen

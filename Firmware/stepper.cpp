@@ -44,6 +44,42 @@
 uint16_t SP_min = 0x21FF;
 #endif //DEBUG_STACK_MONITOR
 
+#ifdef DEBUG_ISR_LOAD
+// Stepper ISR load meter (diagnostic, off by default).
+// Timer1 runs in CTC mode, so TCNT1 at the end of the ISR is the time the ISR needed (0.5 us ticks),
+// and OCR1A on entry is the period it was scheduled after the previous one. Peak load is taken over
+// windows of 1024 ISR calls (~50 ms at 20 kHz) because that is what starves the main loop.
+static uint32_t isr_busy_sum, isr_period_sum;          // since the last report
+static uint32_t isr_win_busy, isr_win_period;           // current window
+static uint16_t isr_win_calls, isr_busy_max, isr_peak_permille, isr_late;
+
+FORCE_INLINE static void isr_load_account(uint16_t period, uint16_t busy)
+{
+    isr_busy_sum += busy; isr_period_sum += period;
+    isr_win_busy += busy; isr_win_period += period;
+    if (busy > isr_busy_max) isr_busy_max = busy;
+    if (++isr_win_calls == 1024) {
+        const uint16_t pm = ((isr_win_busy >> 6) * 1000UL) / ((isr_win_period >> 6) | 1);
+        if (pm > isr_peak_permille) isr_peak_permille = pm;
+        isr_win_busy = isr_win_period = 0; isr_win_calls = 0;
+        if (isr_period_sum > 0x7FFFFFFFUL) isr_busy_sum = isr_period_sum = 0; // never overflow
+    }
+}
+
+//! Print the load since the last call and start over (main context).
+void isr_load_report()
+{
+    uint32_t busy, period; uint16_t bmax, peak, late;
+    CRITICAL_SECTION_START
+    busy = isr_busy_sum; period = isr_period_sum; bmax = isr_busy_max; peak = isr_peak_permille; late = isr_late;
+    isr_busy_sum = isr_period_sum = 0; isr_busy_max = 0; isr_peak_permille = 0; isr_late = 0;
+    CRITICAL_SECTION_END
+    const uint16_t avg = period ? ((busy >> 6) * 1000UL) / ((period >> 6) | 1) : 0;
+    printf_P(PSTR("%SStepper ISR load: avg %u.%u%% peak %u.%u%% longest %u us late %u\n"),
+        echomagic, avg / 10, avg % 10, peak / 10, peak % 10, bmax / 2, late);
+}
+#endif //DEBUG_ISR_LOAD
+
 
 /*
  * Stepping macros
@@ -265,6 +301,9 @@ ISR(TIMER1_COMPA_vect) {
 	uint16_t sp = SPL + 256 * SPH;
 	if (sp < SP_min) SP_min = sp;
 #endif //DEBUG_STACK_MONITOR
+#ifdef DEBUG_ISR_LOAD
+    const uint16_t isr_period = OCR1A; // how long after the previous interrupt this one was scheduled
+#endif //DEBUG_ISR_LOAD
 
 #ifdef LIN_ADVANCE
     advance_isr_scheduler();
@@ -291,7 +330,13 @@ ISR(TIMER1_COMPA_vect) {
 #endif
     // Fix the next interrupt to be executed after 8us from now.
     OCR1A = TCNT1 + 16;
+#ifdef DEBUG_ISR_LOAD
+    ++isr_late; // the ISR needed more time than it was given: the CPU is saturated
+#endif //DEBUG_ISR_LOAD
   }
+#ifdef DEBUG_ISR_LOAD
+  isr_load_account(isr_period, TCNT1);
+#endif //DEBUG_ISR_LOAD
 }
 
 uint8_t last_dir_bits = 0;

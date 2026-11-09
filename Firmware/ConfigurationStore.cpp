@@ -4,6 +4,7 @@
 #include "planner.h"
 #include "temperature.h"
 #include "ConfigurationStore.h"
+#include "stepper.h"
 #include "Configuration_var.h"
 
 #ifdef TMC2130
@@ -102,6 +103,9 @@ void Config_PrintSettings(uint8_t level)
     }
 #endif
   if (level >= 10) {
+#ifdef DEBUG_ISR_LOAD
+    isr_load_report();
+#endif //DEBUG_ISR_LOAD
 #ifdef LIN_ADVANCE
     printf_P(PSTR("%SLinear advance settings:\n%S  M900 K%.3f\n"),
                  echomagic, echomagic, extruder_advance_K);
