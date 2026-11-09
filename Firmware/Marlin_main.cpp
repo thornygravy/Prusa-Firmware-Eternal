@@ -6944,7 +6944,7 @@ void process_commands()
     */
     case 503:
     {
-        Config_PrintSettings();
+        Config_PrintSettings(10); // level 10 also reports items M500 does not store (Linear Advance K)
     }
     break;
 
