@@ -65,6 +65,21 @@ void Config_PrintSettings(uint8_t level)
   // 0 = classic jerk. Not stored by M500: set it from the start G-code.
   printf_P(PSTR("%SJunction deviation (mm):\n%S  M205 J%.3f\n"), echomagic, echomagic, junction_deviation);
 #endif
+#ifdef INPUT_SHAPING
+  { // not stored by M500: set it from the start G-code
+    float fx, zx, fy, zy;
+    st_shaping_get(X_AXIS, fx, zx);
+    st_shaping_get(Y_AXIS, fy, zy);
+    // Hosts that edit this (OctoPrint's EEPROM editor) know only one F/D for both axes and would send
+    // the last line back for both: report one line when the axes agree, comments when they differ.
+    if (fx == fy && zx == zy)
+        printf_P(PSTR("%SInput shaping (ZV), F=Hz (0 = off), D=damping ratio:\n%S  M593 F%.2f D%.2f\n"),
+            echomagic, echomagic, fx, zx);
+    else
+        printf_P(PSTR("%SInput shaping (ZV), F=Hz (0 = off), D=damping ratio:\n%S  ; M593 X F%.2f D%.2f\n%S  ; M593 Y F%.2f D%.2f\n"),
+            echomagic, echomagic, fx, zx, echomagic, fy, zy);
+  }
+#endif
 #ifdef PIDTEMP
   printf_P(PSTR("%SPID settings:\n%S   M301 P%.2f I%.2f D%.2f\n"),
     echomagic, echomagic, cs.Kp, unscalePID_i(cs.Ki), unscalePID_d(cs.Kd));

@@ -33,6 +33,11 @@ extern bool abort_on_endstop_hit;
 // Initialize and start the stepper motor subsystem
 void st_init();
 
+#ifdef INPUT_SHAPING
+bool st_shaping_set(uint8_t axis, float freq, float zeta);
+void st_shaping_get(uint8_t axis, float &freq, float &zeta);
+#endif
+
 #ifdef DEBUG_ISR_LOAD
 void isr_load_report();
 #endif

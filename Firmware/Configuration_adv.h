@@ -170,6 +170,16 @@
 #define JUNCTION_DEVIATION
 #define DEFAULT_JUNCTION_DEVIATION 0.0f // [mm] 0 = disabled (classic jerk)
 
+// ZV input shaping, EXPERIMENTAL (M593). Cancels frame ringing by making every X/Y step twice at half
+// amplitude, the second time half a ringing period later (see input_shaping.h).
+//  - Off at start-up. Switch it on with M593 F<hz> (e.g. in the start G-code), off again with M593 F0.
+//  - Homing and probing are never shaped, and every move waits for the echoes of the previous one.
+//  - Costs RAM (2 x SHAPING_QUEUE_SIZE x 2 B) and stepper ISR time while it is on.
+// To leave it out completely, comment the next line: the firmware is then identical to a build
+// without this code.
+#define INPUT_SHAPING
+//#define SHAPING_QUEUE_SIZE 160 // echoes buffered per axis (2 B each); must cover (step rate x half ringing period)
+
 // MS1 MS2 Stepper Driver Microstepping mode table
 #define MICROSTEP1 LOW,LOW
 #define MICROSTEP2 HIGH,LOW

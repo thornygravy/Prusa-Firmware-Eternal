@@ -6232,6 +6232,51 @@ void process_commands()
     }
     break;
 
+#ifdef INPUT_SHAPING
+    /*!
+    ### M593 - ZV input shaping (experimental)
+    Cancels the ringing of the frame by making every X/Y step twice at half amplitude, the second
+    time half a ringing period later. Off at start-up. Not stored in EEPROM: put it in the start G-code.
+    Homing and probing are never shaped.
+    #### Usage
+
+        M593 [ X | Y ] [ F<hz> ] [ D<ratio> ]
+
+    #### Parameters
+    - `X`, `Y` - axis to set, both if neither is given
+    - `F` - ringing frequency in Hz (10 to 200), `F0` switches the axis off
+    - `D` - damping ratio, default 0.1
+
+    Without `F` and `D` the current settings are reported. Setting waits for all moves to finish.
+    */
+    case 593:
+    {
+        const bool seen_x = code_seen('X');
+        const bool seen_y = code_seen('Y');
+        float freq = 0.f, zeta = 0.f;
+        bool has_f = false, has_d = false;
+        if (code_seen('F')) { freq = code_value(); has_f = true; }
+        if (code_seen('D')) { zeta = code_value(); has_d = true; }
+        if (has_f || has_d) {
+            for (uint8_t axis = X_AXIS; axis <= Y_AXIS; ++axis) {
+                if (axis == X_AXIS ? (seen_y && !seen_x) : (seen_x && !seen_y)) continue;
+                float cur_f, cur_z;
+                st_shaping_get(axis, cur_f, cur_z);
+                if (!st_shaping_set(axis, has_f ? freq : cur_f, has_d ? zeta : (cur_z > 0.f ? cur_z : 0.1f))) {
+                    SERIAL_ECHO_START;
+                    SERIAL_ECHOLNPGM("M593: F out of range (10 to 200 Hz, or 0 for off)");
+                }
+            }
+        }
+        for (uint8_t axis = X_AXIS; axis <= Y_AXIS; ++axis) {
+            float cur_f, cur_z;
+            st_shaping_get(axis, cur_f, cur_z);
+            printf_P(PSTR("%S  M593 %c F%.2f D%.2f\n"), echomagic, axis == X_AXIS ? 'X' : 'Y', cur_f, cur_z);
+        }
+    }
+    break;
+#endif //INPUT_SHAPING
+
     /*!
     ### M206 - Set additional homing offsets <a href="https://reprap.org/wiki/G-code#M206:_Offset_axes">M206: Offset axes</a>
     #### Usage

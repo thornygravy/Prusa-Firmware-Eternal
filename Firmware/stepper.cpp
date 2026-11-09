@@ -171,6 +171,46 @@ static bool check_z_endstop = false;
 static bool z_endstop_invert = false;
 
 volatile long count_position[NUM_AXIS] = { 0, 0, 0, 0};
+
+#ifdef INPUT_SHAPING
+#include "input_shaping.h"
+// ZV input shaper (see input_shaping.h). Shaping is off until M593 sets a frequency.
+static shaping::Axis  sh_x, sh_y;
+static shaping::Clock sh_clock;
+
+//! @return true while the shaper has to be clocked: it is on, or echoes are still pending
+FORCE_INLINE static bool sh_engaged() {
+    return sh_x.delay | sh_y.delay | sh_x.count | sh_y.count;
+}
+
+// What the shaper needs from the stepper: make one real step pulse on an axis. The DIR pin is
+// switched when the direction of this step differs from the one the pin selects now (an echo of
+// the previous block can point the other way).
+struct ShapeX {
+    static FORCE_INLINE void emit(shaping::Axis& a, int8_t dir) {
+        if (dir != a.dir) {
+            a.dir = dir;
+            WRITE_NC(X_DIR_PIN, dir < 0 ? INVERT_X_DIR : !INVERT_X_DIR);
+            asm("nop"); asm("nop"); // DIR setup time before the STEP edge, TMC2130 needs tens of ns
+        }
+        STEP_NC_HI(X_AXIS);
+        count_position[X_AXIS] += dir;
+        STEP_NC_LO(X_AXIS);
+    }
+};
+struct ShapeY {
+    static FORCE_INLINE void emit(shaping::Axis& a, int8_t dir) {
+        if (dir != a.dir) {
+            a.dir = dir;
+            WRITE_NC(Y_DIR_PIN, dir < 0 ? INVERT_Y_DIR : !INVERT_Y_DIR);
+            asm("nop"); asm("nop");
+        }
+        STEP_NC_HI(Y_AXIS);
+        count_position[Y_AXIS] += dir;
+        STEP_NC_LO(Y_AXIS);
+    }
+};
+#endif //INPUT_SHAPING
 volatile signed char count_direction[NUM_AXIS] = { 1, 1, 1, 1};
 
 #ifdef LIN_ADVANCE
@@ -304,6 +344,10 @@ ISR(TIMER1_COMPA_vect) {
 #ifdef DEBUG_ISR_LOAD
     const uint16_t isr_period = OCR1A; // how long after the previous interrupt this one was scheduled
 #endif //DEBUG_ISR_LOAD
+#ifdef INPUT_SHAPING
+    // Timer1 runs in CTC mode: OCR1A is the time since the previous compare match, in 0.5 us ticks.
+    if (sh_engaged()) shaping::advance(sh_clock, OCR1A);
+#endif //INPUT_SHAPING
 
 #ifdef LIN_ADVANCE
     advance_isr_scheduler();
@@ -463,6 +507,13 @@ FORCE_INLINE void stepper_next_block()
       WRITE_NC(Y_DIR_PIN, !INVERT_Y_DIR);
       count_direction[Y_AXIS]=1;
     }
+#ifdef INPUT_SHAPING
+    // The DIR pins now select the direction of this block. Homing and probing (endstops on) are never shaped.
+    sh_x.dir = count_direction[X_AXIS];
+    sh_y.dir = count_direction[Y_AXIS];
+    sh_x.active = sh_x.delay && !check_endstops;
+    sh_y.active = sh_y.delay && !check_endstops;
+#endif //INPUT_SHAPING
     if ((out_bits & (1<<Z_AXIS)) != 0) {   // -direction
       WRITE_NC(Z_DIR_PIN,INVERT_Z_DIR);
       count_direction[Z_AXIS]=-1;
@@ -681,6 +732,13 @@ FORCE_INLINE void stepper_tick_lowres()
     // Step in X axis
     counter[X_AXIS].lo += current_block->steps[X_AXIS].lo;
     if (counter[X_AXIS].lo > 0) {
+#ifdef INPUT_SHAPING
+      if (sh_x.active) {
+        counter[X_AXIS].lo -= current_block->step_event_count.lo;
+        shaping::step<ShapeX>(sh_x, sh_clock.now, count_direction[X_AXIS]);
+      } else
+#endif //INPUT_SHAPING
+      {
       STEP_NC_HI(X_AXIS);
 #ifdef DEBUG_XSTEP_DUP_PIN
       STEP_NC_HI(X_DUP_AXIS);
@@ -691,10 +749,18 @@ FORCE_INLINE void stepper_tick_lowres()
 #ifdef DEBUG_XSTEP_DUP_PIN
       STEP_NC_LO(X_DUP_AXIS);
 #endif //DEBUG_XSTEP_DUP_PIN
+      }
     }
     // Step in Y axis
     counter[Y_AXIS].lo += current_block->steps[Y_AXIS].lo;
     if (counter[Y_AXIS].lo > 0) {
+#ifdef INPUT_SHAPING
+      if (sh_y.active) {
+        counter[Y_AXIS].lo -= current_block->step_event_count.lo;
+        shaping::step<ShapeY>(sh_y, sh_clock.now, count_direction[Y_AXIS]);
+      } else
+#endif //INPUT_SHAPING
+      {
       STEP_NC_HI(Y_AXIS);
 #ifdef DEBUG_YSTEP_DUP_PIN
       STEP_NC_HI(Y_DUP_AXIS);
@@ -705,6 +771,7 @@ FORCE_INLINE void stepper_tick_lowres()
 #ifdef DEBUG_YSTEP_DUP_PIN
       STEP_NC_LO(Y_DUP_AXIS);
 #endif //DEBUG_YSTEP_DUP_PIN
+      }
     }
     // Step in Z axis
     counter[Z_AXIS].lo += current_block->steps[Z_AXIS].lo;
@@ -743,6 +810,13 @@ FORCE_INLINE void stepper_tick_highres()
     // Step in X axis
     counter[X_AXIS].wide += current_block->steps[X_AXIS].wide;
     if (counter[X_AXIS].wide > 0) {
+#ifdef INPUT_SHAPING
+      if (sh_x.active) {
+        counter[X_AXIS].wide -= current_block->step_event_count.wide;
+        shaping::step<ShapeX>(sh_x, sh_clock.now, count_direction[X_AXIS]);
+      } else
+#endif //INPUT_SHAPING
+      {
       STEP_NC_HI(X_AXIS);
 #ifdef DEBUG_XSTEP_DUP_PIN
       STEP_NC_HI(X_DUP_AXIS);
@@ -753,10 +827,18 @@ FORCE_INLINE void stepper_tick_highres()
 #ifdef DEBUG_XSTEP_DUP_PIN
       STEP_NC_LO(X_DUP_AXIS);
 #endif //DEBUG_XSTEP_DUP_PIN
+      }
     }
     // Step in Y axis
     counter[Y_AXIS].wide += current_block->steps[Y_AXIS].wide;
     if (counter[Y_AXIS].wide > 0) {
+#ifdef INPUT_SHAPING
+      if (sh_y.active) {
+        counter[Y_AXIS].wide -= current_block->step_event_count.wide;
+        shaping::step<ShapeY>(sh_y, sh_clock.now, count_direction[Y_AXIS]);
+      } else
+#endif //INPUT_SHAPING
+      {
       STEP_NC_HI(Y_AXIS);
 #ifdef DEBUG_YSTEP_DUP_PIN
       STEP_NC_HI(Y_DUP_AXIS);
@@ -767,6 +849,7 @@ FORCE_INLINE void stepper_tick_highres()
 #ifdef DEBUG_YSTEP_DUP_PIN
       STEP_NC_LO(Y_DUP_AXIS);
 #endif //DEBUG_YSTEP_DUP_PIN
+      }
     }
     // Step in Z axis
     counter[Z_AXIS].wide += current_block->steps[Z_AXIS].wide;
@@ -842,9 +925,25 @@ FORCE_INLINE void isr() {
   //WRITE_NC(LOGIC_ANALYZER_CH0, true);
 
 	//if (UVLO) uvlo();
+#ifdef INPUT_SHAPING
+  if (sh_engaged()) {
+    // apply the echoes that are due, also while no block runs (the 1 kHz idle tick drains the queue)
+    shaping::flush<ShapeX>(sh_x, sh_clock.now);
+    shaping::flush<ShapeY>(sh_y, sh_clock.now);
+  }
+#endif //INPUT_SHAPING
   // If there is no current block, attempt to pop one from the buffer
-  if (current_block == NULL)
+  if (current_block == NULL) {
+#ifdef INPUT_SHAPING
+    // Homing and probing (endstops on) run unshaped: let the echoes of the previous shaped block
+    // finish first, they would otherwise be made late and move the carriage while the endstop is watched.
+    if ((sh_x.count | sh_y.count) && check_endstops) {
+      _NEXT_ISR(400); // look again in 200 us
+      return;
+    }
+#endif //INPUT_SHAPING
     stepper_next_block();
+  }
 
   if (current_block != NULL)
   {
@@ -1100,6 +1199,10 @@ FORCE_INLINE void advance_isr_scheduler() {
 
 void st_init()
 {
+#ifdef INPUT_SHAPING
+  shaping::configure(sh_x, 0.f, 0.1f); // off, but with the default damping ratio
+  shaping::configure(sh_y, 0.f, 0.1f);
+#endif //INPUT_SHAPING
 #ifdef TMC2130
 	tmc2130_init(TMCInitParams(false, FarmOrUserECool()));
 #else
@@ -1299,7 +1402,11 @@ void st_reset_timer()
 // Block until all buffered steps are executed
 void st_synchronize()
 {
+#ifdef INPUT_SHAPING
+	while(blocks_queued() || shaping::busy(sh_x) || shaping::busy(sh_y))
+#else
 	while(blocks_queued())
+#endif //INPUT_SHAPING
 	{
 #ifdef TMC2130
 		manage_heater();
@@ -1364,6 +1471,10 @@ void quickStop()
   DISABLE_STEPPER_DRIVER_INTERRUPT();
   while (blocks_queued()) plan_discard_current_block();
   current_block = NULL;
+#ifdef INPUT_SHAPING
+  shaping::purge(sh_x); // the positions counted so far are the steps really made
+  shaping::purge(sh_y);
+#endif //INPUT_SHAPING
 #ifdef LIN_ADVANCE
   nextAdvanceISR = ADV_NEVER;
   current_adv_steps = 0;
@@ -1598,3 +1709,29 @@ void microstep_readings()
       #endif
 }
 #endif //!TMC2130
+
+#ifdef INPUT_SHAPING
+//! Set the shaper of X or Y (M593). Waits until all moves and echoes are done first, because
+//! switching while moving would lose steps.
+//! @param freq ringing frequency in Hz, 0 switches the axis off
+//! @param zeta damping ratio
+//! @return false if the frequency is out of range
+bool st_shaping_set(uint8_t axis, float freq, float zeta)
+{
+    shaping::Axis& a = (axis == X_AXIS) ? sh_x : sh_y;
+    if (freq != 0.0f && (freq < shaping::kMinFrequency || freq > shaping::kMaxFrequency)) return false;
+    st_synchronize();
+    CRITICAL_SECTION_START;
+    shaping::configure(a, freq, zeta);
+    a.de = 0;
+    CRITICAL_SECTION_END;
+    return true;
+}
+
+void st_shaping_get(uint8_t axis, float &freq, float &zeta)
+{
+    const shaping::Axis& a = (axis == X_AXIS) ? sh_x : sh_y;
+    freq = a.freq;
+    zeta = a.zeta;
+}
+#endif //INPUT_SHAPING
