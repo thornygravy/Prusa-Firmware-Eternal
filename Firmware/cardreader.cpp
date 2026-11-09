@@ -778,7 +778,9 @@ bool CardReader::chdir(const char * relpath, bool doPresort)
   }
   else
   {
-    strcpy(dir_names[workDirDepth], relpath);
+    // dir_names[] entries are 9 bytes (8.3 directory name): never trust relpath to fit
+    strncpy(dir_names[workDirDepth], relpath, sizeof(dir_names[0]) - 1);
+    dir_names[workDirDepth][sizeof(dir_names[0]) - 1] = '\0';
     puts(relpath);
 
     if (workDirDepth < MAX_DIR_DEPTH) {
