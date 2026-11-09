@@ -727,6 +727,9 @@ FORCE_INLINE void stepper_check_endstops()
 
 FORCE_INLINE void stepper_tick_lowres()
 {
+#ifdef INPUT_SHAPING
+  uint8_t sh_nx = 0, sh_ny = 0; // steps of this tick, handed to the shaper as one entry per axis
+#endif //INPUT_SHAPING
   for (uint8_t i=0; i < step_loops; ++ i) { // Take multiple steps per interrupt (For high speed moves)
     MSerial.checkRx(); // Check for serial chars.
     // Step in X axis
@@ -735,7 +738,7 @@ FORCE_INLINE void stepper_tick_lowres()
 #ifdef INPUT_SHAPING
       if (sh_x.active) {
         counter[X_AXIS].lo -= current_block->step_event_count.lo;
-        shaping::step<ShapeX>(sh_x, sh_clock.now, count_direction[X_AXIS]);
+        ++sh_nx;
       } else
 #endif //INPUT_SHAPING
       {
@@ -757,7 +760,7 @@ FORCE_INLINE void stepper_tick_lowres()
 #ifdef INPUT_SHAPING
       if (sh_y.active) {
         counter[Y_AXIS].lo -= current_block->step_event_count.lo;
-        shaping::step<ShapeY>(sh_y, sh_clock.now, count_direction[Y_AXIS]);
+        ++sh_ny;
       } else
 #endif //INPUT_SHAPING
       {
@@ -801,10 +804,17 @@ FORCE_INLINE void stepper_tick_lowres()
     if(++ step_events_completed.lo >= current_block->step_event_count.lo)
       break;
   }
+#ifdef INPUT_SHAPING
+  if (sh_nx) shaping::steps<ShapeX>(sh_x, sh_clock.now8, count_direction[X_AXIS], sh_nx);
+  if (sh_ny) shaping::steps<ShapeY>(sh_y, sh_clock.now8, count_direction[Y_AXIS], sh_ny);
+#endif //INPUT_SHAPING
 }
 
 FORCE_INLINE void stepper_tick_highres()
 {
+#ifdef INPUT_SHAPING
+  uint8_t sh_nx = 0, sh_ny = 0; // steps of this tick, handed to the shaper as one entry per axis
+#endif //INPUT_SHAPING
   for (uint8_t i=0; i < step_loops; ++ i) { // Take multiple steps per interrupt (For high speed moves)
     MSerial.checkRx(); // Check for serial chars.
     // Step in X axis
@@ -813,7 +823,7 @@ FORCE_INLINE void stepper_tick_highres()
 #ifdef INPUT_SHAPING
       if (sh_x.active) {
         counter[X_AXIS].wide -= current_block->step_event_count.wide;
-        shaping::step<ShapeX>(sh_x, sh_clock.now, count_direction[X_AXIS]);
+        ++sh_nx;
       } else
 #endif //INPUT_SHAPING
       {
@@ -835,7 +845,7 @@ FORCE_INLINE void stepper_tick_highres()
 #ifdef INPUT_SHAPING
       if (sh_y.active) {
         counter[Y_AXIS].wide -= current_block->step_event_count.wide;
-        shaping::step<ShapeY>(sh_y, sh_clock.now, count_direction[Y_AXIS]);
+        ++sh_ny;
       } else
 #endif //INPUT_SHAPING
       {
@@ -879,6 +889,10 @@ FORCE_INLINE void stepper_tick_highres()
     if(++ step_events_completed.wide >= current_block->step_event_count.wide)
       break;
   }
+#ifdef INPUT_SHAPING
+  if (sh_nx) shaping::steps<ShapeX>(sh_x, sh_clock.now8, count_direction[X_AXIS], sh_nx);
+  if (sh_ny) shaping::steps<ShapeY>(sh_y, sh_clock.now8, count_direction[Y_AXIS], sh_ny);
+#endif //INPUT_SHAPING
 }
 
 
@@ -928,8 +942,8 @@ FORCE_INLINE void isr() {
 #ifdef INPUT_SHAPING
   if (sh_engaged()) {
     // apply the echoes that are due, also while no block runs (the 1 kHz idle tick drains the queue)
-    shaping::flush<ShapeX>(sh_x, sh_clock.now);
-    shaping::flush<ShapeY>(sh_y, sh_clock.now);
+    shaping::flush<ShapeX>(sh_x, sh_clock.now8);
+    shaping::flush<ShapeY>(sh_y, sh_clock.now8);
   }
 #endif //INPUT_SHAPING
   // If there is no current block, attempt to pop one from the buffer
