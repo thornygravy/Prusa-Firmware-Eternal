@@ -437,7 +437,7 @@
 // Uncomment if the host doesn't support '//action:ready' & '//action:notready'.
 // This will replace the "Set Ready"/"Set not Ready" LCD menu entry with
 // "Print from host" and send '//action:start' instead.
-//#define REPLACE_SETREADY
+#define REPLACE_SETREADY
 
 /*------------------------------------
  MOTOR CURRENT SETTINGS
