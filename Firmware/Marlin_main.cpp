@@ -9897,7 +9897,9 @@ float temp_comp_interpolation(float inp_temperature) {
 				b = s[i] / 2;
 				c = (f[i + 1] - f[i]) / h[i] - (2 * h[i] * s[i] + s[i + 1] * h[i]) / 6;
 				d = f[i];
-				sum = a*pow((inp_temperature - x[i]), 3) + b*pow((inp_temperature - x[i]), 2) + c*(inp_temperature - x[i]) + d;
+				// Horner's method: a*x^3 + b*x^2 + c*x + d = ((a*x + b)*x + c)*x + d  (no pow() calls)
+				const float diff = inp_temperature - x[i];
+				sum = ((a * diff + b) * diff + c) * diff + d;
 			}
 
 		return sum;
