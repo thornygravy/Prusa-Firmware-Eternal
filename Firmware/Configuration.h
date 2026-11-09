@@ -4,6 +4,12 @@
 #include <stdint.h>
 #include "boards.h"
 
+// EEPROM backup / restore to the SD card (Settings -> EEPROM Tools).
+// Enabled by default; a variant with tight flash can opt out with EEPROM_BACKUP_DISABLED.
+#ifndef EEPROM_BACKUP_DISABLED
+#define EEPROM_BACKUP_ENABLE
+#endif
+
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
 #define _CONCAT(x,y) x##y

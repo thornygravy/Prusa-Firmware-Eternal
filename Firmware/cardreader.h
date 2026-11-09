@@ -39,6 +39,18 @@ public:
   void openLogFile(const char* name);
   void removeFile(const char* name);
   void closefile(bool store_location=false);
+
+  // Binary file helpers (EEPROM backup). Always relative to the SD root directory.
+  bool openFileReadBinary(const char* name);
+  bool openFileWriteBinary(const char* name);
+  bool closeFileBinary();
+  bool fileExistsBinary(const char* name);
+  bool moveFileBinary(const char* from, const char* to);
+  bool removeFileBinary(const char* name);
+  /// @brief Read raw bytes from the open file. @return bytes read, or -1 on error
+  int16_t readFile(void* buf, uint16_t nbyte) { return file.read(buf, nbyte); }
+  /// @brief Write raw bytes to the open file. @return bytes written, or -1 on error
+  int16_t writeFile(const void* buf, uint16_t nbyte) { return file.write(buf, nbyte); }
   void release();
   void startFileprint();
   uint32_t getFileSize();

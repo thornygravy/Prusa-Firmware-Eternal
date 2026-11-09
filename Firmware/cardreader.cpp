@@ -601,6 +601,62 @@ void CardReader::write_command_no_newline(char *buf)
 }
 
 
+// Binary file helpers (EEPROM backup). Always relative to the root directory: the files must not
+// depend on the folder last browsed in the SD menu, and diveSubfolder() would change that folder.
+bool CardReader::openFileReadBinary(const char* name)
+{
+    if (!mounted) return false;
+    if (file.isOpen()) file.close();
+    return file.open(&root, name, O_READ);
+}
+
+bool CardReader::openFileWriteBinary(const char* name)
+{
+    if (!mounted) return false;
+    if (file.isOpen()) file.close();
+    return file.open(&root, name, O_CREAT | O_WRITE | O_TRUNC);
+}
+
+bool CardReader::closeFileBinary()
+{
+    // the last partial block and the directory entry (file size) are only written by sync()
+    bool ok = file.sync();
+    file.close();
+    return ok;
+}
+
+bool CardReader::fileExistsBinary(const char* name)
+{
+    if (!openFileReadBinary(name)) return false;
+    file.close();
+    return true;
+}
+
+bool CardReader::removeFileBinary(const char* name)
+{
+    if (!mounted) return false;
+    if (file.isOpen()) file.close();
+    return SdBaseFile::remove(&root, name);
+}
+
+// Copy then delete instead of SdBaseFile::rename(): rename() costs ~1.2 KB of flash, this reuses
+// the read/write/remove code already linked.
+bool CardReader::moveFileBinary(const char* from, const char* to)
+{
+    if (!mounted) return false;
+    SdFile src;
+    if (!src.open(&root, from, O_READ)) return false;
+    bool ok = openFileWriteBinary(to);
+    uint8_t buf[64];
+    int16_t n;
+    while (ok && (n = src.read(buf, sizeof(buf))) > 0) {
+        ok = (file.write(buf, n) == n);
+    }
+    ok = closeFileBinary() && ok && (n == 0);
+    src.close();
+    return ok && SdBaseFile::remove(&root, from);
+}
+
 void CardReader::checkautostart(bool force)
 {
   // The SD start is delayed because otherwise the serial cannot answer

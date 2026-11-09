@@ -6,6 +6,7 @@
 #include "temperature.h"
 #include "ultralcd.h"
 #include "Marlin.h"
+#include "eeprom_backup.h"
 #include "language.h"
 #include "cardreader.h"
 #include "fancheck.h"
@@ -99,6 +100,13 @@ static void lcd_language_menu();
 static void lcd_main_menu();
 static void lcd_tune_menu();
 static void lcd_settings_menu();
+#ifdef EEPROM_BACKUP_ENABLE
+static void lcd_eeprom_backup_menu();
+static void lcd_eeprom_backup_do();
+static void lcd_eeprom_restore_do();
+static void lcd_eeprom_undo_do();
+static void lcd_eeprom_verify_do();
+#endif
 static void lcd_control_temperature_menu();
 #ifdef TMC2130
 static void lcd_settings_linearity_correction_menu_save();
@@ -4509,6 +4517,11 @@ static void lcd_settings_menu()
     }
 #endif //SDCARD_SORT_ALPHA
 
+#ifdef EEPROM_BACKUP_ENABLE
+	// EEPROM backup/restore tools
+	MENU_ITEM_SUBMENU_P(PSTR("EEPROM Tools"), lcd_eeprom_backup_menu);
+#endif
+
 	SETTINGS_SOUND;
 
 #ifdef LCD_BL_PIN
@@ -7546,3 +7559,175 @@ void lcd_send_action_start()
     SERIAL_PROTOCOLLNRPGM(MSG_HOST_ACTION_START);
     lcd_return_to_status();
 }
+
+#ifdef EEPROM_BACKUP_ENABLE
+//! @brief EEPROM Backup Menu
+//! Displays submenu with backup, restore, and verify options
+static void lcd_eeprom_backup_menu()
+{
+    MENU_BEGIN();
+    MENU_ITEM_BACK_P(_T(MSG_SETTINGS));
+    MENU_ITEM_FUNCTION_P(PSTR("Backup to SD"), lcd_eeprom_backup_do);
+    MENU_ITEM_FUNCTION_P(PSTR("Restore from SD"), lcd_eeprom_restore_do);
+    MENU_ITEM_FUNCTION_P(PSTR("Undo restore"), lcd_eeprom_undo_do);
+    MENU_ITEM_FUNCTION_P(PSTR("Verify Backup"), lcd_eeprom_verify_do);
+    MENU_END();
+}
+
+//! @brief Show a message for a few seconds (or until clicked) without starving the watchdog
+static void lcd_eeprom_backup_message(const char *line1, const char *line2, uint8_t seconds)
+{
+    lcd_clear();
+    lcd_puts_at_P(0, 1, line1);
+    if (line2) lcd_puts_at_P(0, 2, line2);
+    lcd_wait_for_click_delay(seconds);
+}
+
+static void lcd_eeprom_backup_error(const char *title, EepromBackupResult result, const char *hint = NULL)
+{
+    lcd_clear();
+    lcd_puts_at_P(0, 1, title);
+    lcd_puts_at_P(0, 2, PSTR("Error code:"));
+    lcd_set_cursor(13, 2);
+    lcd_print((int)result);
+    if (hint) lcd_puts_at_P(0, 3, hint);
+    lcd_wait_for_click_delay(hint ? 5 : 3);
+}
+
+//! @brief The backup files use the same SD file handle as printing and M28 uploads
+//! @return true (and a message) if the printer or the card is busy
+static bool lcd_eeprom_backup_busy()
+{
+    if (!(printer_active() || moves_planned() || card.isFileOpen())) return false;
+    lcd_eeprom_backup_message(PSTR("Printer busy"), NULL, 3);
+    menu_back();
+    return true;
+}
+
+static void lcd_eeprom_backup_working(const char *msg)
+{
+    lcd_clear();
+    lcd_puts_at_P(0, 1, msg);
+    lcd_puts_at_P(0, 2, PSTR("Please wait"));
+}
+
+//! @brief Execute EEPROM backup to SD card
+static void lcd_eeprom_backup_do()
+{
+    if (lcd_eeprom_backup_busy()) return;
+    lcd_eeprom_backup_working(PSTR("Backing up..."));
+
+    EepromBackupResult result = backup_eeprom_to_sd();
+
+    if (result == EEPROM_BACKUP_OK) {
+        lcd_eeprom_backup_message(PSTR("Backup complete!"), PSTR("File: /EEPROM.BAK"), 2);
+    } else {
+        lcd_eeprom_backup_error(PSTR("Backup failed!"), result);
+    }
+
+    menu_back();
+}
+
+//! @brief Display the restore/undo result: reset on success to reload EEPROM values into RAM
+static void lcd_eeprom_restore_result(EepromBackupResult result)
+{
+    if (result == EEPROM_BACKUP_OK) {
+        lcd_clear();
+        lcd_puts_at_P(0, 0, PSTR("Restore complete!"));
+        lcd_puts_at_P(0, 2, PSTR("Restarting..."));
+        _delay(2000);
+        softReset();
+    } else {
+        const char *hint = NULL;
+        if (result == EEPROM_BACKUP_ERR_ROLLED_BACK) hint = PSTR("Settings unchanged");
+        else if (result == EEPROM_BACKUP_ERR_ROLLBACK_FAILED) hint = PSTR("Use Undo restore");
+        lcd_eeprom_backup_error(result == EEPROM_BACKUP_ERR_PRINTER_MISMATCH ? PSTR("Other printer type!") : PSTR("Restore failed!"), result, hint);
+        menu_back();
+    }
+}
+
+//! @brief Execute EEPROM restore from SD card with confirmation
+static void lcd_eeprom_restore_do()
+{
+    if (lcd_eeprom_backup_busy()) return;
+
+    // Step 1: Display warning and wait for first confirmation
+    // Use lcd_show_multiscreen_message_yes_no_and_wait_P to handle display properly
+    // Line 3 is reserved for Yes/No buttons
+    uint8_t choice = lcd_show_multiscreen_message_yes_no_and_wait_P(
+        PSTR("Restore EEPROM?\nAll settings will\nbe overwritten!"), false, 1);
+
+    if (choice != LCD_LEFT_BUTTON_CHOICE) {
+        lcd_eeprom_backup_message(PSTR("Restore cancelled"), NULL, 2);
+        menu_back();
+        return;
+    }
+
+    // Step 2: Attempt restore with version validation enabled
+    lcd_eeprom_backup_working(PSTR("Restoring..."));
+    EepromBackupResult result = restore_eeprom_from_sd(true);
+
+    // Step 3: Handle version mismatch with second confirmation
+    if (result == EEPROM_BACKUP_ERR_VERSION_MISMATCH) {
+        choice = lcd_show_multiscreen_message_yes_no_and_wait_P(
+            PSTR("FW version\nmismatch!\n\nContinue anyway?"), false, 1);
+
+        if (choice != LCD_LEFT_BUTTON_CHOICE) {
+            lcd_eeprom_backup_message(PSTR("Restore cancelled"), NULL, 2);
+            menu_back();
+            return;
+        }
+
+        // User confirmed - retry without version validation
+        lcd_eeprom_backup_working(PSTR("Restoring..."));
+        result = restore_eeprom_from_sd(false);
+    }
+
+    // Step 4: Display final result and handle restart
+    lcd_eeprom_restore_result(result);
+}
+
+//! @brief Write back the EEPROM saved before the last restore
+static void lcd_eeprom_undo_do()
+{
+    if (lcd_eeprom_backup_busy()) return;
+
+    uint8_t choice = lcd_show_multiscreen_message_yes_no_and_wait_P(
+        PSTR("Undo last restore?\nSettings before it\nwill be restored."), false, 1);
+    if (choice != LCD_LEFT_BUTTON_CHOICE) {
+        menu_back();
+        return;
+    }
+
+    lcd_eeprom_backup_working(PSTR("Restoring..."));
+    lcd_eeprom_restore_result(undo_eeprom_restore());
+}
+
+//! @brief Verify EEPROM backup integrity
+static void lcd_eeprom_verify_do()
+{
+    if (lcd_eeprom_backup_busy()) return;
+    lcd_eeprom_backup_working(PSTR("Verifying..."));
+
+    struct EepromBackupHeader header;
+    EepromBackupResult result = verify_eeprom_backup(&header);
+
+    if (result == EEPROM_BACKUP_OK) {
+        lcd_clear();
+        lcd_puts_at_P(0, 0, PSTR("Backup OK!"));
+        lcd_puts_at_P(0, 1, PSTR("FW:"));
+        lcd_set_cursor(4, 1);
+        for (uint8_t i = 0; i < 12 && header.fw_version[i] != 0; i++) {
+            lcd_print((char)header.fw_version[i]);
+        }
+        lcd_puts_at_P(0, 2, PSTR("CRC:"));
+        lcd_set_cursor(5, 2);
+        lcd_print(header.crc32, HEX);
+        lcd_wait_for_click_delay(4);
+    } else {
+        lcd_eeprom_backup_error(PSTR("Verify failed!"), result);
+    }
+
+    menu_back();
+}
+#endif // EEPROM_BACKUP_ENABLE
