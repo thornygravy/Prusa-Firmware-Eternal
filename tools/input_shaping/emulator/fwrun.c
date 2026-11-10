@@ -8,9 +8,9 @@
 #include "avr_uart.h"
 #include "avr_adc.h"
 #include "avr_eeprom.h"
-static avr_t* avr; static FILE* ev; static int quiet;
+static avr_t* avr; static FILE* ev; static int quiet; static volatile int ok_flag; static char lbuf[96]; static int ll;
 static void on_pin(struct avr_irq_t* irq, uint32_t v, void* p) { fprintf(ev, "%llu %d %u\n", (unsigned long long)avr->cycle, (int)(intptr_t)p, v); }
-static void on_tx(struct avr_irq_t* irq, uint32_t v, void* p) { if (!quiet) { putchar((int)v); fflush(stdout); } }
+static void on_tx(struct avr_irq_t* irq, uint32_t v, void* p) { if (v == 10) { if (ll >= 2 && lbuf[0] == 'o' && lbuf[1] == 'k') ok_flag = 1; ll = 0; } else if (v != 13 && ll < 90) lbuf[ll++] = (char)v; if (!quiet) { putchar((int)v); fflush(stdout); } }
 // script: lines "<seconds> <gcode>" ; sent character by character
 struct cmd { double t; char* s; } cmds[512]; int ncmd;
 int main(int argc, char** argv) {
@@ -41,22 +41,29 @@ int main(int argc, char** argv) {
     avr_raise_irq(avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('J'), 2), 1);                // BTN_EN1
     uint64_t release_at = 0;
     uint64_t end = (uint64_t)(seconds * 16000000.0); int ci = 0; const char* cur = NULL; size_t pos = 0; uint64_t next_char = 0;
-    uint64_t next_dbg = 0;
+    uint64_t next_dbg = 0; int oksync = getenv("OKSYNC") != NULL, waiting = 0;
+    static uint64_t prof[131072]; double pf_a = -1, pf_b = -1; const char* pf_out = NULL;
+    if (getenv("PROFILE")) { char* p = strdup(getenv("PROFILE")); pf_a = atof(strtok(p, ",")); pf_b = atof(strtok(NULL, ",")); pf_out = strtok(NULL, ","); }
+    const uint64_t charcyc = getenv("CHARCYC") ? strtoull(getenv("CHARCYC"), NULL, 10) : 4000;
     while (avr->cycle < end) {
+        uint32_t pc0 = avr->pc; uint64_t c0 = avr->cycle;
         int st = avr_run(avr);
+        if (pf_out && avr->cycle >= (uint64_t)(pf_a * 16e6) && avr->cycle < (uint64_t)(pf_b * 16e6)) prof[(pc0 >> 1) & 0x1FFFF] += avr->cycle - c0;
         avr->data[0xC0] |= (1 << 5); // UCSR0A.UDRE0: the transmit buffer is always ready (simavr quirk)
         if (getenv("PCTRACE") && avr->cycle >= next_dbg) { fprintf(stderr, "PC 0x%05x cycle %llu\n", avr->pc, (unsigned long long)avr->cycle); next_dbg = avr->cycle + 100000; } if (st == cpu_Done || st == cpu_Crashed) { fprintf(stderr, "\n[cpu state %d at %.3f s]\n", st, avr->cycle / 16e6); break; }
+        if (ok_flag) { ok_flag = 0; if (waiting) { waiting = 0; fprintf(ev, "%llu 90 0\n", (unsigned long long)avr->cycle); } }
         if (release_at && avr->cycle >= release_at) { avr_raise_irq(btn, 1); release_at = 0; }
-        if (!cur && ci < ncmd && avr->cycle >= (uint64_t)(cmds[ci].t * 16e6)) {
+        if (!cur && !waiting && ci < ncmd && avr->cycle >= (uint64_t)(cmds[ci].t * 16e6)) {
             if (!strncmp(cmds[ci].s, "POKE ", 5)) { unsigned a, v; sscanf(cmds[ci].s + 5, "%x %x", &a, &v); avr->data[a] = (uint8_t)v; ++ci; }
             else if (!strcmp(cmds[ci].s, "CLICK")) { avr_raise_irq(btn, 0); release_at = avr->cycle + 3200000; ++ci; }   // press for 200 ms
             else { cur = cmds[ci].s; pos = 0; ++ci; }
         }
         if (cur && avr->cycle >= next_char) {
-            if (pos <= strlen(cur)) { avr_raise_irq(rx, pos < strlen(cur) ? (uint8_t)cur[pos] : '\n'); ++pos; next_char = avr->cycle + 4000; }
-            else cur = NULL;
+            if (pos <= strlen(cur)) { avr_raise_irq(rx, pos < strlen(cur) ? (uint8_t)cur[pos] : '\n'); ++pos; next_char = avr->cycle + charcyc; }
+            else { cur = NULL; waiting = oksync; }
         }
     }
+    if (pf_out) { FILE* pf = fopen(pf_out, "w"); for (int i = 0; i < 131072; ++i) if (prof[i]) fprintf(pf, "%x %llu\n", i * 2, (unsigned long long)prof[i]); fclose(pf); }
     if (getenv("PEEK16")) { unsigned a = strtoul(getenv("PEEK16"), NULL, 16); fprintf(stderr, "\n[PEEK16 0x%04x = 0x%04x]", a, avr->data[a] | (avr->data[a + 1] << 8)); }
     fprintf(stderr, "\n[done at %.3f s simulated]\n", avr->cycle / 16e6); fclose(ev); return 0;
 }

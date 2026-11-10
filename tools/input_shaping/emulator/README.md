@@ -21,3 +21,11 @@ through the boot dialogs. Events are `<cycle> <id> <level>`: ids 0-3 = X/Y/Z/E s
 is a step), 10/11 = X/Y direction (PL0/PL1; X high = negative, Y high = positive).
 
 Build with `-DDEBUG_ISR_LOAD` and send `M503` before and after a move to read the stepper ISR duty cycle.
+
+## More switches
+* `OKSYNC=1` sends the next G-code line only after the previous `ok` (like OctoPrint) and logs each `ok` as event id 90;
+  `CHARCYC=1389` paces the serial line at 115200 baud.
+* `PROFILE=<from_s>,<to_s>,<file>` writes the exact cycles per instruction address between the two times; resolve it
+  with `avr-addr2line -i -f -C` or `avr-nm`.
+* Build with `-DPLANNER_TRAPEZOID_SELFTEST` and run `gen_random_gcode.py` output through it: every recalculation the
+  planner would skip prints `TRAPEZOID SAME`, and `TRAPEZOID MISMATCH` would mean skipping was not exact.

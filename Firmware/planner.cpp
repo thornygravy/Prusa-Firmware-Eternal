@@ -208,6 +208,18 @@ void calculate_trapezoid_for_block(block_t *block, float entry_speed, float exit
   if (final_rate > block->nominal_rate)
       final_rate = block->nominal_rate;
 
+  // The trapezoid only depends on the two rates and on constants fixed when the block was planned, and
+  // planner_recalculate() asks again for most blocks after every new line although their integer rates
+  // did not change. A block stores the rates it was last calculated with (and plan_buffer_line() clears
+  // them), so the unchanged case can return before the software 32 bit divisions below.
+#ifdef PLANNER_TRAPEZOID_SELFTEST
+  // test builds never skip, they check that skipping would have been exact
+  const bool unchanged = (block->initial_rate == initial_rate) && (block->final_rate == final_rate);
+#else
+  if (block->initial_rate == initial_rate && block->final_rate == final_rate)
+      return;
+#endif
+
   uint32_t acceleration      = block->acceleration_steps_per_s2;
   if (acceleration == 0)
       // Don't allow zero acceleration.
@@ -297,6 +309,16 @@ void calculate_trapezoid_for_block(block_t *block, float entry_speed, float exit
   // This blocking is safe in the context of a 10kHz stepper driver interrupt
   // or a 115200 Bd serial line receive interrupt, which will not trigger faster than 12kHz.
   if (! block->busy) { // Don't update variables if block is busy.
+#ifdef PLANNER_TRAPEZOID_SELFTEST
+    if (unchanged && (block->accelerate_until != accelerate_steps || block->decelerate_after != accelerate_steps+plateau_steps
+#ifdef LIN_ADVANCE
+        || block->final_adv_steps != final_adv_steps || block->max_adv_steps != max_adv_steps
+#endif
+        ))
+        puts_P(PSTR("TRAPEZOID MISMATCH"));
+    else if (unchanged)
+        puts_P(PSTR("TRAPEZOID SAME"));
+#endif //PLANNER_TRAPEZOID_SELFTEST
     block->accelerate_until = accelerate_steps;
     block->decelerate_after = accelerate_steps+plateau_steps;
     block->initial_rate = initial_rate;
@@ -728,6 +750,10 @@ void plan_buffer_line(float x, float y, float z, const float &e, float feed_rate
 
   // Mark block as not busy (Not executed by the stepper interrupt, could be still tinkered with.)
   block->busy = false;
+
+  // No trapezoid calculated for this block yet: a calculated rate is never below MINIMAL_STEP_RATE, so
+  // calculate_trapezoid_for_block() cannot mistake the stale contents of the slot for its own result.
+  block->initial_rate = 0;
 
   // Set sdlen for calculating sd position
   block->sdlen = 0;
