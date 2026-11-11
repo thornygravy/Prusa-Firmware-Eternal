@@ -4517,11 +4517,6 @@ static void lcd_settings_menu()
     }
 #endif //SDCARD_SORT_ALPHA
 
-#ifdef EEPROM_BACKUP_ENABLE
-	// EEPROM backup/restore tools
-	MENU_ITEM_SUBMENU_P(PSTR("EEPROM Tools"), lcd_eeprom_backup_menu);
-#endif
-
 	SETTINGS_SOUND;
 
 #ifdef LCD_BL_PIN
@@ -4538,6 +4533,11 @@ static void lcd_settings_menu()
 	{
 		MENU_ITEM_FUNCTION_P(PSTR("Disable farm mode"), lcd_disable_farm_mode);
 	}
+
+#ifdef EEPROM_BACKUP_ENABLE
+	// EEPROM backup/restore: always the last entry
+	MENU_ITEM_SUBMENU_P(PSTR("EEPROM"), lcd_eeprom_backup_menu);
+#endif
 
 	MENU_END();
 }
