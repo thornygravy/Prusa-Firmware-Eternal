@@ -36,6 +36,8 @@ set(CUSTOM_COMPILE_OPTIONS
     CACHE STRING "Allows adding custom C/C++ flags"
     )
 
+option(NO_MMU "Build without MMU2/MMU3 support (about 16 KB smaller; behaves like MMU Mode: Off)" OFF)
+
 #set(FN_VERSION_SUFFIX "FW${PROJECT_VERSION}+${PROJECT_VERSION_HASH}")
 set(FN_VERSION_SUFFIX "FW_${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_REV}")
 if(PROJECT_VERSION_FLV AND PROJECT_VERSION_FLV_VER)
@@ -276,6 +278,12 @@ set(FW_SOURCES
     xflash_dump.cpp
     xyzcal.cpp
     )
+if(NO_MMU)
+  # MMU code is replaced by the inline stub in Firmware/mmu2_stub.h
+  list(FILTER FW_SOURCES EXCLUDE REGEX "^mmu2")
+  add_compile_definitions(NO_MMU)
+endif()
+
 list(TRANSFORM FW_SOURCES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/Firmware/)
 
 set(AVR_SOURCES

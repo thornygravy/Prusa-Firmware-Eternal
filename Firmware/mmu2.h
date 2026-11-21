@@ -1,6 +1,11 @@
 /// @file
 #pragma once
 
+#ifdef NO_MMU
+// Community build without MMU support: see mmu2_stub.h
+#include "mmu2_stub.h"
+#else
+
 #include "mmu2_state.h"
 #include "mmu2_marlin.h"
 
@@ -378,3 +383,5 @@ private:
 extern MMU2 mmu2;
 
 } // namespace MMU2
+
+#endif // NO_MMU

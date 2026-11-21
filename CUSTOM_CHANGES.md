@@ -18,6 +18,7 @@ Base: upstream commit `f3e0dfd` (the 3.14.1 release plus 59 later upstream commi
 | `MK3S+_custom_no_shaping.hex` | Everything below **except** input shaping. Start here. |
 | `MK3S+_custom_SHAPING_experimental.hex` | The same plus experimental input shaping (off at boot). |
 | `MK3S+_custom_DIAGNOSTIC.hex` | Shaping build plus the ISR load meter and stack monitor, for testing. |
+| `..._noMMU.hex` variants | The same builds with all MMU2/MMU3 code compiled out (about 20 KB smaller). Only for printers **without** an MMU. |
 
 English only (these are the single-language builds). Settings are kept in the printer's EEPROM and flashing does
 not normally erase them, but run an `M503` and note your values first.
@@ -37,6 +38,7 @@ Flash and RAM costs were measured on the MK3S English build (about 236.3 KB of t
 | **Input shaping (ZV)**, `M593 F<hz> [D<zeta>] [X\|Y]`, `F0` = off. Experimental, see below. | off at boot | +5.1 KB flash, +0.6 KB RAM |
 | **Planner: skip unchanged trapezoid recalculation.** The planner redid slow 32-bit divisions for queued blocks whose result had not changed. Same output, about 11 to 21 % less time per G-code line when many moves are queued; only matters for dense/curvy G-code. | on | +76 B |
 | Smaller fixes: `chdir()` could overflow a 9-byte buffer; `strlen()` hoisted out of a loop; PINDA temperature cubic evaluated with Horner's method instead of two `pow()` calls; `-flto-partition=none` (-234 B). | on | about -200 B |
+| **`NO_MMU` build option** (`-DNO_MMU=ON`): removes the MMU2/MMU3 protocol, error screens and tool-change code and replaces the `MMU2` class with an inline stub (`Firmware/mmu2_stub.h`). Behaves like the stock firmware with "MMU Mode: Off"; the Settings entries "MMU" and "Reset MMU" are hidden so nothing can write the MMU-enabled flag. EEPROM layout is untouched, so backups stay compatible. | off (normal build unchanged, byte for byte) | **-20.3 KB flash, -164 B RAM** |
 | `DEBUG_ISR_LOAD` (off by default): stepper ISR average/peak load, longest ISR, missed deadlines, printed by `M503`. | off | +0.8 KB when on |
 
 ### Input shaping
@@ -69,10 +71,17 @@ implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shapin
   random stress, zero mismatches.
 * **Real-printer testing: add your results here.** At the time of writing the author had just started a first long
   print on the no-shaping build. Nothing here should be called "proven on hardware" until that is filled in.
+* `NO_MMU`: the default build's hex is byte-identical with and without these changes. In the emulator, the NO_MMU build
+  boots to the same state and produces the same step/direction stream (34,753 step edges, identical sequence, per-step
+  timing within about 20 us) for a script that includes `T0`, `T1` and `M702`. Differences in serial output: no
+  "MMU is Off" line at boot, more free RAM. Not run on a printer.
 * Not checked on a printer: EEPROM restore on real SD hardware, crash detection, Power Panic, MMU (the MMU is not
   a goal of this fork), other printer variants (only `MK3S.h` was edited).
 
 ## Building
+
+Add `-DNO_MMU=ON` to the CMake configure step for the build without MMU code. Without it the build is identical
+to before (checked by comparing hex files).
 
 Follow the upstream instructions in `README.md` (`utils/bootstrap.py`, then CMake). For the diagnostic build add
 `-DCUSTOM_COMPILE_OPTIONS="-DDEBUG_ISR_LOAD -DDEBUG_STACK_MONITOR"` to the CMake configure step.
