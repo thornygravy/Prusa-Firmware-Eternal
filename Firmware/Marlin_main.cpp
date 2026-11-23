@@ -3590,7 +3590,24 @@ static void extended_capabilities_report()
     cap_line(PSTR("AUTOREPORT_POSITION"), ENABLED(AUTO_REPORT));
     // EXTENDED_M20 (support for L and T parameters)
     cap_line(PSTR("EXTENDED_M20"), 1);
+#ifdef NO_MMU
+    cap_line(PSTR("PRUSA_MMU2"), 0); // community build without MMU code
+#else
     cap_line(PSTR("PRUSA_MMU2"), 1); //this will soon change to ENABLED(PRUSA_MMU2_SUPPORT)
+#endif
+    // Community fork: reported only when compiled in, so hosts can tell what this build can do
+#ifdef BABYSTEPPING
+    cap_line(PSTR("BABYSTEPPING"), 1); // M290 Z
+#endif
+#ifdef JUNCTION_DEVIATION
+    cap_line(PSTR("JUNCTION_DEVIATION"), 1); // M205 J
+#endif
+#ifdef INPUT_SHAPING
+    cap_line(PSTR("INPUT_SHAPING"), 1); // M593
+#endif
+#ifdef EEPROM_BACKUP_ENABLE
+    cap_line(PSTR("EEPROM_BACKUP"), 1); // Settings -> EEPROM on the LCD
+#endif
 }
 #endif //EXTENDED_CAPABILITIES_REPORT
 
