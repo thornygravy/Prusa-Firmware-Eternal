@@ -30,7 +30,7 @@ Flash and RAM costs were measured on the MK3S English build (about 236.3 KB of t
 | Feature | Default | Cost |
 |---|---|---|
 | **EEPROM backup / restore to SD** (`Settings -> EEPROM`, last entry): Backup, Restore, Undo restore, Verify. CRC32-checked, never restores the serial number, refuses backups from another printer type, snapshots before a restore and rolls back if it fails, will not run while printing. | on | +3.6 KB |
-| **Junction deviation**, `M205 J<mm>` (GRBL/Marlin cornering model instead of the X/Y jerk check). `J0` = stock jerk logic, bit for bit. RAM only; set it in your start G-code. Typical 0.008 to 0.025. | off (`J0`) | +1.3 KB |
+| **Junction deviation**, `M205 J<mm>` (GRBL/Marlin cornering model instead of the X/Y jerk check). `J0` = stock jerk logic, bit for bit. `M500` stores it (see "Settings that stick" below). Typical 0.008 to 0.025. | off (`J0`) | +1.3 KB |
 | **Linear Advance K in the Tune menu** (`LA_LIVE_K`, already in upstream but disabled). | on | +0.5 KB |
 | **"Print from host"** replaces "Set Ready" and sends `//action:start`, which OctoPrint 1.5+ handles (`REPLACE_SETREADY`). | on | about 0 |
 | **PETG preheat 250 C** (was 230) to match the Prusament PETG profile. | on | 0 |
@@ -38,6 +38,9 @@ Flash and RAM costs were measured on the MK3S English build (about 236.3 KB of t
 | **Input shaping (ZV)**, `M593 F<hz> [D<zeta>] [X\|Y]`, `F0` = off. Experimental, see below. | off at boot | +5.1 KB flash, +0.6 KB RAM |
 | **Planner: skip unchanged trapezoid recalculation.** The planner redid slow 32-bit divisions for queued blocks whose result had not changed. Same output, about 11 to 21 % less time per G-code line when many moves are queued; only matters for dense/curvy G-code. | on | +76 B |
 | Smaller fixes: `chdir()` could overflow a 9-byte buffer; `strlen()` hoisted out of a loop; PINDA temperature cubic evaluated with Horner's method instead of two `pow()` calls; `-flto-partition=none` (-234 B). | on | about -200 B |
+| **Settings that stick**: `M500` now also stores junction deviation and input shaping, `M501` reads them back (they are applied at start-up), `M502` resets them. They live in 11 of the 20 EEPROM bytes the stock map lists as free (0x0F73), so the stock layout and `EEPROM_VERSION` are untouched and stock firmware ignores them. While everything is at its default nothing is written, so EEPROM backups of an unmodified setup stay identical. | on (stores only when you use `M500` with these features changed) | +1.2 KB |
+| **`M290 Z<mm>`** (babystep): the G-code form of Live Adjust Z for OctoPrint plugins and macros. Same stored offset and limits as the menu (per sheet, -9.99 mm .. 0, only below Z 2 mm, not while homing or paused); a change outside the range is rejected whole; every change writes the EEPROM once. `M290` alone reports the offset. | on | +0.65 KB |
+| **`M115` capability lines**: `Cap:BABYSTEPPING`, `JUNCTION_DEVIATION`, `INPUT_SHAPING`, `EEPROM_BACKUP` (only when compiled in), and `PRUSA_MMU2:0` in the NO_MMU build. | on | +0.05 KB |
 | **`NO_MMU` build option** (`-DNO_MMU=ON`): removes the MMU2/MMU3 protocol, error screens and tool-change code and replaces the `MMU2` class with an inline stub (`Firmware/mmu2_stub.h`). Behaves like the stock firmware with "MMU Mode: Off"; the Settings entries "MMU" and "Reset MMU" are hidden so nothing can write the MMU-enabled flag. EEPROM layout is untouched, so backups stay compatible. | off (normal build unchanged, byte for byte) | **-20.3 KB flash, -164 B RAM** |
 | `DEBUG_ISR_LOAD` (off by default): stepper ISR average/peak load, longest ISR, missed deadlines, printed by `M503`. | off | +0.8 KB when on |
 
@@ -47,7 +50,8 @@ Every X/Y step is also made once more, half a ringing period later, at a weighte
 cancel the frame's resonance. The idea and fixed-point parameters come from Marlin 2.1.2's integrated ZV shaper; the
 implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shaping.h`).
 
-* Off at boot. `M593 X F40 D0.1` turns it on for X, `M593 F0` turns it off. Not stored in EEPROM: put it in start G-code.
+* Off at boot unless you stored it with `M500`. `M593 X F40 D0.1` turns it on for X, `M593 F0` turns it off. Nothing is
+  stored while it is off, so a printer that never used it is unchanged. You can also keep it in the start G-code.
   Find your frequency with a ringing tower; matching it within about 10 % matters.
 * Never applied while homing or probing, and unshaped moves wait for pending echoes.
 * **To leave it out of the firmware completely**, comment out `#define INPUT_SHAPING` in `Firmware/Configuration_adv.h`.
@@ -71,6 +75,12 @@ implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shapin
   random stress, zero mismatches.
 * **Real-printer testing: add your results here.** At the time of writing the author had just started a first long
   print on the no-shaping build. Nothing here should be called "proven on hardware" until that is filled in.
+* Settings that stick, `M290` and the capability lines: tested in the emulator only. Stored values survive a restart
+  and come back at boot; `M502` resets, `M501` restores, and `M502` + `M500` erases the entry (EEPROM then equals a
+  printer that never used it, apart from the stock thermal-model defaults that `M502` + `M500` always write).
+  `M290`: report, relative moves, both out-of-range rejections and the stored offset were checked, and the Z motor made
+  exactly the expected 20, 8 and 4 steps. The G-code stream of the earlier test still gives the identical step
+  sequence. Not run on a printer.
 * `NO_MMU`: the default build's hex is byte-identical with and without these changes. In the emulator, the NO_MMU build
   boots to the same state and produces the same step/direction stream (34,753 step edges, identical sequence, per-step
   timing within about 20 us) for a script that includes `T0`, `T1` and `M702`. Differences in serial output: no
