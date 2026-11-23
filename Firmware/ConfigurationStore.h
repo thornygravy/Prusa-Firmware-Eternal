@@ -51,6 +51,13 @@ extern M500_conf cs;
 
 void Config_ResetDefault();
 
+// Junction deviation and input shaping, kept in their own EEPROM bytes (see EEPROM_CUSTOM_SETTINGS).
+// All do nothing in a build that has neither feature.
+void Config_StoreCustomSettings();      // M500 (stores nothing while all values are at their defaults)
+bool Config_LoadCustomSettings();       // at boot, after st_init(): apply stored values, false if none are stored
+void Config_RetrieveCustomSettings();   // M501: stored values, or the defaults if none are stored
+void Config_ResetCustomSettings();      // M502: defaults (junction deviation off, shaping off)
+
 #ifndef DISABLE_M503
 void Config_PrintSettings(uint8_t level = 0);
 #else

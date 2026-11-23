@@ -41,6 +41,9 @@ int main(int argc, char** argv) {
     avr_raise_irq(avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('J'), 2), 1);                // BTN_EN1
     uint64_t release_at = 0;
     uint64_t end = (uint64_t)(seconds * 16000000.0); int ci = 0; const char* cur = NULL; size_t pos = 0; uint64_t next_char = 0;
+    // optional whole-EEPROM image in (EEPROM_IN=file, 4096 bytes), applied after SEED; dumped again at the end (EEPROM_OUT=file)
+    if (getenv("EEPROM_IN")) { static uint8_t img[4096]; FILE* fi = fopen(getenv("EEPROM_IN"), "rb");
+        if (fi && fread(img, 1, sizeof img, fi) == sizeof img) { avr_eeprom_desc_t d = { .ee = img, .offset = 0, .size = sizeof img }; avr_ioctl(avr, AVR_IOCTL_EEPROM_SET, &d); } else fprintf(stderr, "EEPROM_IN: cannot read 4096 bytes\n"); if (fi) fclose(fi); }
     uint64_t next_dbg = 0; int oksync = getenv("OKSYNC") != NULL, waiting = 0;
     static uint64_t prof[131072]; double pf_a = -1, pf_b = -1; const char* pf_out = NULL;
     if (getenv("PROFILE")) { char* p = strdup(getenv("PROFILE")); pf_a = atof(strtok(p, ",")); pf_b = atof(strtok(NULL, ",")); pf_out = strtok(NULL, ","); }
@@ -64,6 +67,8 @@ int main(int argc, char** argv) {
         }
     }
     if (pf_out) { FILE* pf = fopen(pf_out, "w"); for (int i = 0; i < 131072; ++i) if (prof[i]) fprintf(pf, "%x %llu\n", i * 2, (unsigned long long)prof[i]); fclose(pf); }
+    if (getenv("EEPROM_OUT")) { static uint8_t img[4096]; avr_eeprom_desc_t d = { .ee = img, .offset = 0, .size = sizeof img }; avr_ioctl(avr, AVR_IOCTL_EEPROM_GET, &d);
+        FILE* fo = fopen(getenv("EEPROM_OUT"), "wb"); if (fo) { fwrite(img, 1, sizeof img, fo); fclose(fo); } }
     if (getenv("PEEK16")) { unsigned a = strtoul(getenv("PEEK16"), NULL, 16); fprintf(stderr, "\n[PEEK16 0x%04x = 0x%04x]", a, avr->data[a] | (avr->data[a + 1] << 8)); }
     fprintf(stderr, "\n[done at %.3f s simulated]\n", avr->cycle / 16e6); fclose(ev); return 0;
 }

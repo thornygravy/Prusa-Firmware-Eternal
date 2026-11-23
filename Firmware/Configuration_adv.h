@@ -165,14 +165,16 @@
 //    so very sharp corners behave exactly like stock firmware.
 //  - Moves without XYZ motion (retracts, unretracts) always use the classic jerk logic.
 //  - Runtime control: M205 J<mm>. J0 selects the classic jerk logic; this is the default, so
-//    a fresh build behaves like stock until you opt in. The value is not stored in EEPROM,
-//    set it from your slicer's start G-code. Typical values are 0.008 .. 0.025 mm.
+//    a fresh build behaves like stock until you opt in. M500 stores the value (in EEPROM bytes the stock
+//    map lists as free), M501 reads it back, M502 resets it; or just set it in your slicer's start G-code.
+//    Typical values are 0.008 .. 0.025 mm.
 #define JUNCTION_DEVIATION
 #define DEFAULT_JUNCTION_DEVIATION 0.0f // [mm] 0 = disabled (classic jerk)
 
 // ZV input shaping, EXPERIMENTAL (M593). Cancels frame ringing by making every X/Y step twice at half
 // amplitude, the second time half a ringing period later (see input_shaping.h).
-//  - Off at start-up. Switch it on with M593 F<hz> (e.g. in the start G-code), off again with M593 F0.
+//  - Off at start-up unless M500 stored it (nothing is stored while it is off). Switch it on with M593 F<hz>
+//    (e.g. in the start G-code), off again with M593 F0.
 //  - Homing and probing are never shaped, and every move waits for the echoes of the previous one.
 //  - Costs RAM (2 x SHAPING_QUEUE_SIZE x 2 B) and stepper ISR time while it is on.
 // To leave it out completely, comment the next line: the firmware is then identical to a build

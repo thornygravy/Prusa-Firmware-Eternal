@@ -62,11 +62,11 @@ void Config_PrintSettings(uint8_t level)
 #endif //TMC2130
   );
 #ifdef JUNCTION_DEVIATION
-  // 0 = classic jerk. Not stored by M500: set it from the start G-code.
+  // 0 = classic jerk. Stored by M500.
   printf_P(PSTR("%SJunction deviation (mm):\n%S  M205 J%.3f\n"), echomagic, echomagic, junction_deviation);
 #endif
 #ifdef INPUT_SHAPING
-  { // not stored by M500: set it from the start G-code
+  { // stored by M500
     float fx, zx, fy, zy;
     st_shaping_get(X_AXIS, fx, zx);
     st_shaping_get(Y_AXIS, fy, zy);
@@ -204,6 +204,91 @@ static const M500_conf default_conf PROGMEM =
 };
 
 
+#if defined(JUNCTION_DEVIATION) || defined(INPUT_SHAPING)
+// The five stored values are consecutive uint16_t starting at EEPROM_CUSTOM_JUNCTION_DEV, in this order:
+// junction deviation, X frequency, X damping ratio, Y frequency, Y damping ratio.
+// A value is stored as round(value * scale); 0xFFFF means "not stored".
+static const float custom_scale[5] PROGMEM = { 10000.f, 100.f, 1000.f, 100.f, 1000.f };
+static constexpr uint8_t kCustomValues = 5;
+static constexpr uint16_t kCustomErased = 0xFFFF;
+
+//! @brief Write junction deviation and input shaping to EEPROM (part of M500)
+//! @details While everything is at its default (junction deviation 0, shaping off) nothing is stored and a
+//! previous entry is erased, so the EEPROM of a printer that does not use these features stays byte for
+//! byte as it was, and so do its EEPROM backups.
+void Config_StoreCustomSettings()
+{
+    float value[kCustomValues] = { -1.f, -1.f, -1.f, -1.f, -1.f }; // negative: feature not compiled in
+    bool all_default = true;
+#ifdef JUNCTION_DEVIATION
+    value[0] = junction_deviation;
+    if (junction_deviation != DEFAULT_JUNCTION_DEVIATION) all_default = false;
+#endif
+#ifdef INPUT_SHAPING
+    for (uint8_t axis = X_AXIS; axis <= Y_AXIS; ++axis) {
+        st_shaping_get(axis, value[1 + 2 * axis], value[2 + 2 * axis]);
+        if (value[1 + 2 * axis] != 0.f) all_default = false;
+    }
+#endif
+    if (all_default) eeprom_update_byte_notify(reinterpret_cast<uint8_t*>(EEPROM_CUSTOM_PRESENT), 0xFF); // erase first
+    for (uint8_t i = 0; i < kCustomValues; ++i) {
+        uint16_t word = kCustomErased;
+        if (!all_default && value[i] >= 0.f) {
+            const float r = value[i] * pgm_read_float(&custom_scale[i]) + 0.5f;
+            word = (r > 65534.f) ? 65534 : static_cast<uint16_t>(r);
+        }
+        eeprom_update_word_notify(reinterpret_cast<uint16_t*>(EEPROM_CUSTOM_JUNCTION_DEV + 2 * i), word);
+    }
+    if (!all_default) eeprom_update_byte_notify(reinterpret_cast<uint8_t*>(EEPROM_CUSTOM_PRESENT), 0x01); // valid last
+}
+
+//! @brief Apply the stored junction deviation and input shaping
+//! @details Must run after st_init(), which would otherwise switch the shaper off again.
+//! Values that fail the checks of M593 (F outside 10 to 200 Hz) are ignored.
+//! @retval true values were stored and have been applied
+//! @retval false nothing is stored, nothing was changed
+bool Config_LoadCustomSettings()
+{
+    if (eeprom_read_byte(reinterpret_cast<uint8_t*>(EEPROM_CUSTOM_PRESENT)) != 0x01) return false;
+    float value[kCustomValues];
+    for (uint8_t i = 0; i < kCustomValues; ++i) {
+        const uint16_t word = eeprom_read_word(reinterpret_cast<uint16_t*>(EEPROM_CUSTOM_JUNCTION_DEV + 2 * i));
+        value[i] = (word == kCustomErased) ? -1.f : word / pgm_read_float(&custom_scale[i]);
+    }
+#ifdef JUNCTION_DEVIATION
+    if (value[0] >= 0.f) junction_deviation = value[0];
+#endif
+#ifdef INPUT_SHAPING
+    for (uint8_t axis = X_AXIS; axis <= Y_AXIS; ++axis) {
+        if (value[1 + 2 * axis] >= 0.f && value[2 + 2 * axis] >= 0.f)
+            st_shaping_set(axis, value[1 + 2 * axis], value[2 + 2 * axis]);
+    }
+#endif
+    return true;
+}
+
+void Config_ResetCustomSettings()
+{
+#ifdef JUNCTION_DEVIATION
+    junction_deviation = DEFAULT_JUNCTION_DEVIATION;
+#endif
+#ifdef INPUT_SHAPING
+    st_shaping_set(X_AXIS, 0.f, 0.1f);
+    st_shaping_set(Y_AXIS, 0.f, 0.1f);
+#endif
+}
+
+void Config_RetrieveCustomSettings()
+{
+    if (!Config_LoadCustomSettings()) Config_ResetCustomSettings();
+}
+#else // neither feature compiled in: leave whatever an earlier build stored untouched
+void Config_StoreCustomSettings() {}
+bool Config_LoadCustomSettings() { return false; }
+void Config_RetrieveCustomSettings() {}
+void Config_ResetCustomSettings() {}
+#endif // JUNCTION_DEVIATION || INPUT_SHAPING
+
 void Config_StoreSettings()
 {
   strcpy_P(cs.version, default_conf.version);
@@ -211,6 +296,7 @@ void Config_StoreSettings()
 #ifdef THERMAL_MODEL
   thermal_model_save_settings();
 #endif
+  Config_StoreCustomSettings();
 
   SERIAL_ECHO_START;
   SERIAL_ECHOLNPGM("Settings Stored");

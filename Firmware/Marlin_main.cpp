@@ -1304,6 +1304,9 @@ void setup()
 
 #endif //TMC2130
 	st_init();    // Initialize stepper, this enables interrupts!
+	// Junction deviation and input shaping stored by M500. Only now: st_init() switches the shaper off.
+	// Skipped when the printer type changed, like the other stored settings.
+	if (!(hw_changed & 0b10)) Config_LoadCustomSettings();
 
 #ifdef TMC2130
 	tmc2130_mode = silentMode?TMC2130_MODE_SILENT:TMC2130_MODE_NORMAL;
@@ -6208,7 +6211,7 @@ void process_commands()
     - `E` - Maximum E jerk (units/s)
     - `J` - Junction deviation (mm). Limits corner speed by how far the path may cut the corner at the
             move's acceleration, replacing the X/Y jerk check between XYZ moves. `J0` selects the classic
-            jerk logic (default). Not stored in EEPROM. Typical values: 0.008 - 0.025
+            jerk logic (default). Stored by M500, read back at start-up. Typical values: 0.008 - 0.025
     */
     case 205:
     {
@@ -6236,7 +6239,8 @@ void process_commands()
     /*!
     ### M593 - ZV input shaping (experimental)
     Cancels the ringing of the frame by making every X/Y step twice at half amplitude, the second
-    time half a ringing period later. Off at start-up. Not stored in EEPROM: put it in the start G-code.
+    time half a ringing period later. Off at start-up unless M500 stored it: M500 saves the current values
+    (nothing is stored while the shaper is off), M501 reads them back, M502 switches it off.
     Homing and probing are never shaped.
     #### Usage
 
@@ -6962,6 +6966,7 @@ void process_commands()
     case 501:
     {
         Config_RetrieveSettings();
+        Config_RetrieveCustomSettings(); // junction deviation and input shaping
     }
     break;
 
@@ -6976,6 +6981,7 @@ void process_commands()
     case 502:
     {
         Config_ResetDefault();
+        Config_ResetCustomSettings(); // junction deviation off, input shaping off
     }
     break;
 

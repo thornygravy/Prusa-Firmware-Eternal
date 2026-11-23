@@ -488,6 +488,17 @@ static_assert(sizeof(Sheets) == EEPROM_SHEETS_SIZEOF, "Sizeof(Sheets) is not EEP
 #define _EEPROM_FREE_NR7_               (EEPROM_FAN_CHECK_ENABLED - 9*2) // 9 x uint16_t
 #define _EEPROM_FREE_NR8_               (_EEPROM_FREE_NR7_ - 2) // uint16_t
 
+// Community fork: junction deviation and input shaping, stored by M500 (Config_StoreCustomSettings).
+// Uses the 20 contiguous bytes that the stock map above documents as free (_EEPROM_FREE_NR8_ and
+// _EEPROM_FREE_NR7_), so the stock layout and EEPROM_VERSION are untouched. Erased (0xFF) = nothing stored.
+#define EEPROM_CUSTOM_SETTINGS          _EEPROM_FREE_NR8_                    // 11 of the 20 bytes are used
+#define EEPROM_CUSTOM_PRESENT           (EEPROM_CUSTOM_SETTINGS)             // uint8_t, 0x01 = the fields below are valid
+#define EEPROM_CUSTOM_JUNCTION_DEV      (EEPROM_CUSTOM_SETTINGS + 1)         // uint16_t, junction deviation in mm * 10000
+#define EEPROM_CUSTOM_SHAPING_X_FREQ    (EEPROM_CUSTOM_SETTINGS + 3)         // uint16_t, Hz * 100 (0 = off)
+#define EEPROM_CUSTOM_SHAPING_X_ZETA    (EEPROM_CUSTOM_SETTINGS + 5)         // uint16_t, damping ratio * 1000
+#define EEPROM_CUSTOM_SHAPING_Y_FREQ    (EEPROM_CUSTOM_SETTINGS + 7)         // uint16_t, Hz * 100 (0 = off)
+#define EEPROM_CUSTOM_SHAPING_Y_ZETA    (EEPROM_CUSTOM_SETTINGS + 9)         // uint16_t, damping ratio * 1000
+
 #define EEPROM_UVLO_E_ABS               (_EEPROM_FREE_NR8_ - 1) // uint8_t
 #define EEPROM_UVLO_CURRENT_POSITION_E  (EEPROM_UVLO_E_ABS - 4) // float
 #define EEPROM_UVLO_SAVED_SEGMENT_IDX   (EEPROM_UVLO_CURRENT_POSITION_E - 2) //uint16_t
