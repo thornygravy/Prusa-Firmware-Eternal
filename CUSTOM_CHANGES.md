@@ -91,7 +91,8 @@ implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shapin
   before the backup, and restore only writes bytes that differ, so that run did not prove it wrote anything.
   The fork owner then tested again using OctoPrint's Marlin EEPROM Editor and reports that restoring a backup
   and the Editor's compatibility with this firmware's `M503` output both work (details of the changed values were
-  not recorded). **Undo restore** has not been tried on hardware.
+  not recorded). **Undo restore** was then tried as well and also works. The whole backup/restore feature has now been
+  used on real hardware (one printer, one SD card, the builds named above).
 * Not checked on a printer: crash detection, Power Panic, MMU (the MMU is not a goal of this fork), other printer
   variants (only `MK3S.h` was edited).
 
