@@ -75,8 +75,12 @@ implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shapin
   boots to the same state and produces the same step/direction stream (34,753 step edges, identical sequence, per-step
   timing within about 20 us) for a script that includes `T0`, `T1` and `M702`. Differences in serial output: no
   "MMU is Off" line at boot, more free RAM. Not run on a printer.
-* Not checked on a printer: EEPROM restore on real SD hardware, crash detection, Power Panic, MMU (the MMU is not
-  a goal of this fork), other printer variants (only `MK3S.h` was edited).
+* EEPROM backup on a real printer and SD card (reported by the fork owner, MK3S+): **Backup** wrote `EEPROM.BAK` and
+  **Verify** passed. A **Restore** was run and the settings were correct afterwards, but nothing had been changed
+  before the backup, and restore only writes bytes that differ, so that run did not prove it wrote anything.
+  A restore that changes a setting back, and **Undo restore**, are still to be tested on hardware.
+* Not checked on a printer: crash detection, Power Panic, MMU (the MMU is not a goal of this fork), other printer
+  variants (only `MK3S.h` was edited).
 
 ## Building
 
