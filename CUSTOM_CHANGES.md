@@ -89,7 +89,9 @@ implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shapin
   the `NO_MMU` option existed; the NO_MMU builds share the same backup code but were not tested): **Backup** wrote `EEPROM.BAK` and
   **Verify** passed. A **Restore** was run and the settings were correct afterwards, but nothing had been changed
   before the backup, and restore only writes bytes that differ, so that run did not prove it wrote anything.
-  A restore that changes a setting back, and **Undo restore**, are still to be tested on hardware.
+  The fork owner then tested again using OctoPrint's Marlin EEPROM Editor and reports that restoring a backup
+  and the Editor's compatibility with this firmware's `M503` output both work (details of the changed values were
+  not recorded). **Undo restore** has not been tried on hardware.
 * Not checked on a printer: crash detection, Power Panic, MMU (the MMU is not a goal of this fork), other printer
   variants (only `MK3S.h` was edited).
 
