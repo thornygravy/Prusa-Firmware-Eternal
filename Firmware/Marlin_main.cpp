@@ -6497,6 +6497,62 @@ void process_commands()
     }
     break;
 
+#ifdef BABYSTEPPING
+    /*!
+    ### M290 - Babystep Z (Live Adjust Z)
+    The G-code form of Settings/Tune -> Live Adjust Z, for OctoPrint plugins and macros. The offset is the same one
+    that menu uses: stored per sheet in the EEPROM, applied at the next G80, and limited to -9.99 mm .. 0, so the
+    nozzle can only move closer to the bed than the calibrated zero. Only allowed where the menu allows it: during
+    a print or while idle, not while homing, leveling or paused, and only below Z 2 mm. A change that would leave
+    the allowed range is rejected as a whole. Every change writes the EEPROM once, like leaving the menu does.
+    #### Usage
+
+        M290 [ Z ]
+
+    #### Parameters
+    - `Z` - change in mm, relative: negative moves the nozzle toward the bed, positive away from it
+
+    Without `Z` the current offset is reported.
+    */
+    case 290:
+    {
+        const uint8_t sheet = eeprom_read_byte(&(EEPROM_Sheets_base->active_sheet));
+        uint16_t* const z_offset_addr = reinterpret_cast<uint16_t*>(&(EEPROM_Sheets_base->s[sheet].z_offset));
+        // same logic as lcd_babystep_z() and babystep_load()
+        int16_t total = 0;
+        if (eeprom_is_sheet_initialized(sheet) && calibration_status_get(CALIBRATION_STATUS_LIVE_ADJUST))
+            total = static_cast<int16_t>(eeprom_read_word(z_offset_addr));
+        if (code_seen('Z'))
+        {
+            if (!babystep_allowed_strict())
+            {
+                SERIAL_ECHO_START;
+                SERIAL_ECHOLNPGM("M290: not allowed now (needs Z below 2 mm, not homing, leveling or paused)");
+                break;
+            }
+            const float dz = code_value();
+            const float steps = dz * cs.axis_steps_per_mm[Z_AXIS];
+            const int16_t delta = static_cast<int16_t>(steps + (steps < 0.f ? -0.5f : 0.5f));
+            const int32_t wanted = static_cast<int32_t>(total) + delta;
+            if (!(steps > -32000.f && steps < 32000.f) || wanted < Z_BABYSTEP_MIN || wanted > Z_BABYSTEP_MAX)
+            {
+                SERIAL_ECHO_START;
+                SERIAL_ECHOLNPGM("M290: Z out of range (total must stay within -9.99 .. 0 mm)");
+                break;
+            }
+            if (delta != 0)
+            {
+                babystepsTodoZadd(delta);
+                total = static_cast<int16_t>(wanted);
+                eeprom_update_word_notify(z_offset_addr, static_cast<uint16_t>(total));
+                calibration_status_set(CALIBRATION_STATUS_LIVE_ADJUST);
+            }
+        }
+        printf_P(PSTR("%SZ babystep total: %.3f mm\n"), echomagic, total / cs.axis_steps_per_mm[Z_AXIS]);
+    }
+    break;
+#endif //BABYSTEPPING
+
     /*!
     ### M226 - Wait for Pin state <a href="https://reprap.org/wiki/G-code#M226:_Wait_for_pin_state">M226: Wait for pin state</a>
     Wait until the specified pin reaches the state required
