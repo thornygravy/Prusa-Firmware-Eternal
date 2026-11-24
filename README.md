@@ -5,6 +5,17 @@
   </picture>
 </p>
 
+> ## ⚠️ Unofficial community fork. Not made, reviewed, endorsed or supported by Prusa Research.
+> **Prusa Firmware Eternal** is an independent hobby project by a printer owner (with AI assistance). Prusa Research
+> has no involvement in it. "Prusa" is a trademark of Prusa Research a.s. and is used here only to say which printers
+> and which upstream firmware this is based on. Do not contact Prusa support about problems with this firmware, and
+> expect that flashing it may affect your warranty and support eligibility. You flash it at your own risk.
+>
+> It adds extra MK3S/MK3S+ features (SD-card EEPROM backup, junction deviation, experimental input shaping, a
+> no-MMU build and more) on top of upstream [Prusa-Firmware](https://github.com/prusa3d/Prusa-Firmware).
+> Read [CUSTOM_CHANGES.md](CUSTOM_CHANGES.md) before flashing. For official firmware, use
+> [Prusa Drivers](https://www.prusa3d.com/drivers/).
+
 # Prusa Firmware Eternal
 
 This repository contains the source code and the development versions of the firmware running on the [Original Prusa i3](https://prusa3d.com/) MK3S/MK3/MK2.5S/MK2.5 line of printers.
