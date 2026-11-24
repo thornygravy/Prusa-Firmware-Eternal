@@ -1,5 +1,9 @@
-> **Community fork:** this branch adds extra MK3S/MK3S+ features (SD-card EEPROM backup, junction deviation,
-> experimental input shaping and more). See [CUSTOM_CHANGES.md](CUSTOM_CHANGES.md) before flashing.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/eternal-logo-dark.png">
+    <img alt="Prusa Firmware Eternal" src="docs/images/eternal-logo-light.png" width="420">
+  </picture>
+</p>
 
 # Prusa Firmware Eternal
 
