@@ -18,36 +18,77 @@
 
 # Prusa Firmware Eternal
 
-This repository contains the source code and the development versions of the firmware running on the [Original Prusa i3](https://prusa3d.com/) MK3S/MK3/MK2.5S/MK2.5 line of printers.
+Prusa Firmware Eternal is a community-modified version of the firmware for the **Original Prusa i3 MK3S / MK3S+**,
+made by an MK3S+ owner who likes these printers and wanted to keep improving them.
 
-The latest official builds can be downloaded from [Prusa Drivers](https://www.prusa3d.com/drivers/). Pre-built development releases are also [available here](https://github.com/prusa3d/Prusa-Firmware/releases).
+It is based on [Prusa-Firmware](https://github.com/prusa3d/Prusa-Firmware) (upstream commit `f3e0dfd`: the 3.14.1
+release plus 59 later upstream commits), which is in turn based on [Marlin 1.0.x](https://github.com/MarlinFirmware/Marlin/)
+by Scott Lahteine (@thinkyhead) et al. Like them it is distributed under the [GNU GPL 3 license](LICENSE).
 
-The firmware for the Original Prusa i3 printers is proudly based on [Marlin 1.0.x](https://github.com/MarlinFirmware/Marlin/) by Scott Lahteine (@thinkyhead) et al. and is distributed under the terms of the [GNU GPL 3 license](LICENSE).
+**Target printer:** MK3S / MK3S+ (the `MK3S` variant, English only). Other variants in the tree (MK3, MK2.5/S, ...)
+come from upstream and have not been built or tested here.
 
-This repository contains _development material only!_
+## What is different from Prusa's firmware
+
+- SD-card **EEPROM backup / restore** and compatibility with OctoPrint's Marlin EEPROM Editor
+- **Junction deviation** (`M205 J`), `M290` live Z babystep, settings that stick through `M500`/`M501`/`M502`
+- Optimisations in the planner and elsewhere to free flash and CPU time
+- A **`NO_MMU` build** for printers without an MMU (about 20 KB smaller)
+- **Experimental** ZV input shaping (`M593`), off unless you turn it on
+- English only, honest version numbers (3.14.1-*commit count*), extra `M115` capability lines
+
+[CUSTOM_CHANGES.md](CUSTOM_CHANGES.md) has the full list, which hex file to pick, what has and has not been tested
+on a real printer, and credits. Read it before flashing.
+
+## Getting the firmware
+
+Pre-built `.hex` files are attached to the [Releases](../../releases) page of this repository. They are built by the
+maintainer, not by Prusa, and not signed. If you would rather not trust a binary, build it yourself (below).
+
+To flash a `.hex` file, use the firmware flashing tool in PrusaSlicer (Configuration, then Flash Printer Firmware) or
+any other method you already use for custom firmware. Run `M503` first and keep the output so you can restore your
+settings if anything goes wrong.
+
+## Support and bug reports
+
+- This project is **not** supported by Prusa Research. Please do not report its problems to Prusa.
+- Report bugs and ask questions in this repository's issues. Say which hex file or commit you used, and whether you
+  have an MMU.
+- It is a hobby project, so expect slow and best-effort answers.
+- If a bug also exists in stock firmware, reporting it upstream at
+  [prusa3d/Prusa-Firmware](https://github.com/prusa3d/Prusa-Firmware) is the right place for that part.
+
+For official, supported firmware go to [Prusa Drivers](https://www.prusa3d.com/drivers/).
 
 
 # Build
 ## Linux
-There are two ways to build Prusa-Firmware on Linux: using [CMake](#cmake) (recommended for developers) or with [PF-build](#pf-build) which is more user-friendly for casual users.
+Build with [CMake](#cmake) (recommended). [PF-build](#pf-build) is a helper script inherited from upstream and is
+less tested with this fork.
 
 ### CMake
 #### Quick-start
-The workflow should be pretty straightforward for anyone with development experience. After installing git and a recent version of python 3 all you have to do is:
+After installing git and a recent version of python 3 all you have to do is:
 
-    # clone the repository
-    git clone https://github.com/prusa3d/Prusa-Firmware
-    cd Prusa-Firmware
+    # clone the repository (keep the full history: the version number is the commit count)
+    git clone https://github.com/thornygravy/Prusa-Firmware-Eternal
+    cd Prusa-Firmware-Eternal
 
     # automatically setup dependencies
     ./utils/bootstrap.py
 
-    # configure and build
+    # configure and build the MK3S English firmware
     mkdir build
     cd build
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/AvrGcc.cmake
-    ninja
+    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../cmake/AvrGcc.cmake -DFW_VARIANTS=MK3S
+    ninja MK3S_ENGLISH
 
+Fork-specific options:
+
+- `-DNO_MMU=ON`: build without MMU2/MMU3 code (only for printers without an MMU).
+- Input shaping is compiled in by default. To leave it out completely, comment out `#define INPUT_SHAPING` in
+  `Firmware/Configuration_adv.h`.
+- Diagnostic build: `-DCUSTOM_COMPILE_OPTIONS="-DDEBUG_ISR_LOAD -DDEBUG_STACK_MONITOR"`.
 
 #### Detailed CMake guide
 Building with cmake requires:
@@ -73,7 +114,7 @@ When using a recent Fedora(non-atomic)/RHEL distribution, install the dependenci
 
 When using a Fedora Atomic/UBlue distribution use `rpm-ostree install --allow-inactive` instead of `sudo dnf install`
 
-Prusa-Firmware depends on a pinned version of `avr-gcc` and the external `prusa3dboards` package. These can be setup using `./utils/bootstrap.py`:
+The firmware depends on a pinned version of `avr-gcc` and the external `prusa3dboards` package. These can be setup using `./utils/bootstrap.py`:
 
     # automatically setup dependencies
     ./utils/bootstrap.py
@@ -113,8 +154,8 @@ When building the following targets are available:
 Automated tests are built with cmake by configuring for the current host:
 
     # clone the repository
-    git clone https://github.com/prusa3d/Prusa-Firmware
-    cd Prusa-Firmware
+    git clone https://github.com/thornygravy/Prusa-Firmware-Eternal
+    cd Prusa-Firmware-Eternal
 
     # automatically setup dependencies
     ./utils/bootstrap.py
@@ -133,7 +174,7 @@ Automated tests are built with cmake by configuring for the current host:
 PF-build is recommended for users without development experience. Download or clone the repository,
 then run PF-build and simply follow the instructions:
 
-    cd Prusa-Firmware
+    cd Prusa-Firmware-Eternal
     ./PF-build.sh
 
 PF-build currently assumes a Debian/Ubuntu (or derivative) distribution.
@@ -150,17 +191,17 @@ PF-build currently assumes a Debian/Ubuntu (or derivative) distribution.
 
 #### First time setup
 
-Start by cloning the Prusa-Firmware repository
+Start by cloning this repository
 
-    git clone https://github.com/prusa3d/Prusa-Firmware
+    git clone https://github.com/thornygravy/Prusa-Firmware-Eternal
 
-Open the `Prusa-Firmware` folder in VScode.
+Open the `Prusa-Firmware-Eternal` folder in VScode.
 
 Open a new terminal in VScode (Terminal→New Terminal) and run
 
     python .\utils\bootstrap.py
 
-This will download all dependencies required to build the firmware. You should see a `.dependencies` folder in the Prusa-Firmware folder.
+This will download all dependencies required to build the firmware. You should see a `.dependencies` folder in the repository folder.
 
 Reload VScode. If all works correctly you should see the VScode automatically configuring the CMake project for you. If this doesn't happen you likely need to set the CMake kit; This can be done in two ways:
 
@@ -173,48 +214,12 @@ After updating the kit, you may need to reload VScode.
 
 To start building a firmware, click the CMake Tools plugin icon on the far left side. You will get a very large list of targets to build. Find the firmware you'd like to build (like `MK3S_ENGLISH`) and select the small icon which shows "Build" when hovered over.
 
-The built .hex file can then be found in folder `Prusa-Firmware/build`
+The built .hex file can then be found in folder `build`
 
 
-## Arduino IDE (deprecated)
+# Credits and license
 
-Using Arduino IDE is still possible, but _no longer supported_. Prusa-Firmware requires a complex multi-step build process that cannot be done automatically with just the IDE. For a long time we provided instructions to use Arduino in combination with shell scripts, however starting with 3.13 the build system has been completely switched to `cmake`.
-
-Building with Arduino IDE results in a *limited* firmware:
-
-- Arduino IDE can only build a single, english-only variant at a time that you manually have to select
-- The build will not be reproducible (meaning you will likely get a different binary every time you build the same sources)
-- You need to download, patch and select the correct board definitions by hand
-
-For these reasons, you should think twice before reporting issues for a firmware built with Arduino. If you find a bug in the firmware, building and testing using CMake should be your first thought. Issues regarding Arduino builds are answered by the community and are not officially supported.
-
-
-### Environment preparation
-
-Install "Arduino Software IDE" from the official website https://www.arduino.cc -> Software -> Downloads. Version 1.8.19 or higher is required.
-
-Setup Arduino to install and use the Prusa board definitions:
-
-- Open Arduino and navigate to File -> Preferences -> Settings
-- To the text field "Additional Boards Manager URLs" add `https://raw.githubusercontent.com/prusa3d/Arduino_Boards/master/IDE_Board_Manager/package_prusa3d_index.json`
-- Open Board manager (Tools -> Board -> Board manager)
-- Install "Prusa Research AVR Boards by Prusa Research"
-
-
-### Source code preparation
-
-Clone or download this repository to your local drive.
-
-In the subdirectory `Firmware/variants/` select the configuration file (.h) corresponding to your printer model and manually copy it to `Firmware/Configuration_prusa.h`
-
-Run "Arduino IDE", then
-
-- Open the file `Firmware/Firmware.ino`
-- Select the target board with Tools -> Board -> "PrusaResearch Einsy RAMBo"
-- Open `Firmware/config.h` and change `LANG_MODE` to 0.
-
-
-### Compilation and upload
-
-- Run the compilation: Sketch -> Verify/Compile
-- Upload the result code into the connected printer: Sketch -> Upload
+GPL-3.0, same as upstream. Built on the work of Prusa Research and its contributors, Marlin, GRBL, vdidon (SD EEPROM
+backup code) and cp2004's OctoPrint-EEPROM-Marlin plugin. Much of the code and testing of this fork was done with an
+AI assistant (Claude), so review it like any other unreviewed patch set. Details are in
+[CUSTOM_CHANGES.md](CUSTOM_CHANGES.md).
