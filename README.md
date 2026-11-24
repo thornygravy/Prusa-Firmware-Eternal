@@ -1,7 +1,7 @@
 > **Community fork:** this branch adds extra MK3S/MK3S+ features (SD-card EEPROM backup, junction deviation,
 > experimental input shaping and more). See [CUSTOM_CHANGES.md](CUSTOM_CHANGES.md) before flashing.
 
-# Prusa Firmware MK3
+# Prusa Firmware Eternal
 
 This repository contains the source code and the development versions of the firmware running on the [Original Prusa i3](https://prusa3d.com/) MK3S/MK3/MK2.5S/MK2.5 line of printers.
 
