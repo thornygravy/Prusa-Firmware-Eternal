@@ -84,7 +84,10 @@ implementation is reworked for Prusa's stepper interrupt (`Firmware/input_shapin
 * `NO_MMU`: the default build's hex is byte-identical with and without these changes. In the emulator, the NO_MMU build
   boots to the same state and produces the same step/direction stream (34,753 step edges, identical sequence, per-step
   timing within about 20 us) for a script that includes `T0`, `T1` and `M702`. Differences in serial output: no
-  "MMU is Off" line at boot, more free RAM. Not run on a printer.
+  "MMU is Off" line at boot, more free RAM.
+  On a real MK3S+ (reported by the fork owner): the first NO_MMU build (`no_shaping_noMMU`, version 3.14.1-8302, before
+  the stored-settings change) completed 3 to 4 prints without problems; the menus, including filament unload, work and the
+  MMU entries are gone from Settings. The later builds (3.14.1-8308 and newer) have not been run on a printer.
 * EEPROM backup on a real printer and SD card (reported by the fork owner, MK3S+, on the `no_shaping` build before
   the `NO_MMU` option existed; the NO_MMU builds share the same backup code but were not tested): **Backup** wrote `EEPROM.BAK` and
   **Verify** passed. A **Restore** was run and the settings were correct afterwards, but nothing had been changed
